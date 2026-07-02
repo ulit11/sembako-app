@@ -496,6 +496,7 @@ app.post('/api/transactions', auth, async (req, res) => {
         data: {
           totalPrice,
           paymentMethod,
+          status: paymentMethod === 'QRIS' ? 'PENDING' : 'SUCCESS',
           customerName: customerName || "",
           userId: storeId, // Link to owner's store
           items: {
@@ -525,13 +526,114 @@ app.post('/api/transactions', auth, async (req, res) => {
   }
 });
 
-// 11. Get all transactions (Protected)
+// 10.1 Get Transaction Status (Protected)
+app.get('/api/transactions/:id/status', auth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const storeId = getStoreId(req.user);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+    const tx = await prisma.transaction.findFirst({
+      where: { id, userId: storeId },
+      select: { status: true }
+    });
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan atau unauthorized.' });
+    }
+    res.json({ status: tx.status });
+  } catch (error) {
+    console.error('Error fetching transaction status:', error);
+    res.status(500).json({ error: 'Internal server error while fetching transaction status' });
+  }
+});
+
+// 10.2 Simulate QRIS Payment Callback (Public - Simulation Webhook)
+app.post('/api/transactions/:id/simulate-pay', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+    const tx = await prisma.transaction.findUnique({
+      where: { id }
+    });
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
+    }
+    if (tx.status === 'SUCCESS') {
+      return res.json({ message: 'Pembayaran sudah sukses sebelumnya.', transaction: tx });
+    }
+    const updatedTx = await prisma.transaction.update({
+      where: { id },
+      data: { status: 'SUCCESS' },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        }
+      }
+    });
+    res.json({ message: 'Pembayaran QRIS berhasil disimulasikan.', transaction: updatedTx });
+  } catch (error) {
+    console.error('Error simulating payment:', error);
+    res.status(500).json({ error: 'Internal server error during payment simulation' });
+  }
+});
+
+// 10.3 Cancel/Delete Pending Transaction (Protected)
+app.delete('/api/transactions/:id/cancel', auth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const storeId = getStoreId(req.user);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+    const tx = await prisma.transaction.findFirst({
+      where: { id, userId: storeId, status: 'PENDING' },
+      include: { items: true }
+    });
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaksi pending tidak ditemukan atau sudah selesai.' });
+    }
+    
+    // Perform database transaction to delete and restore stock
+    await prisma.$transaction(async (prismaTx) => {
+      // Restore stock for each item
+      for (const item of tx.items) {
+        await prismaTx.product.update({
+          where: { id: item.productId },
+          data: {
+            stock: {
+              increment: item.quantity
+            }
+          }
+        });
+      }
+      // Delete transaction items and transaction
+      await prismaTx.transactionItem.deleteMany({
+        where: { transactionId: id }
+      });
+      await prismaTx.transaction.delete({
+        where: { id }
+      });
+    });
+    
+    res.json({ message: 'Transaksi berhasil dibatalkan dan stok dikembalikan.' });
+  } catch (error) {
+    console.error('Error canceling transaction:', error);
+    res.status(500).json({ error: 'Internal server error while canceling transaction' });
+  }
+});
+
+// 11. Get all transactions (Protected - completed transactions only)
 app.get('/api/transactions', auth, async (req, res) => {
   try {
     const storeId = getStoreId(req.user);
     const { paymentMethod, search } = req.query;
 
-    const where = { userId: storeId };
+    const where = { userId: storeId, status: 'SUCCESS' };
 
     if (paymentMethod) {
       where.paymentMethod = paymentMethod;
@@ -636,10 +738,11 @@ app.get('/api/reports', auth, async (req, res) => {
       };
     }
 
-    // 1. Fetch transactions within date range
+    // 1. Fetch transactions within date range (completed/success only)
     const transactions = await prisma.transaction.findMany({
       where: {
         userId: storeId,
+        status: 'SUCCESS',
         ...dateQuery
       },
       include: {

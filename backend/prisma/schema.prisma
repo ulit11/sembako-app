@@ -44,6 +44,7 @@ model Transaction {
   id            Int               @id @default(autoincrement())
   totalPrice    Float
   paymentMethod String            // "Tunai", "QRIS", "Bon"
+  status        String            @default("SUCCESS") // "SUCCESS", "PENDING"
   customerName  String?           // For Bon or general reference
   userId        Int
   user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -249,6 +249,62 @@
       </q-card-section>
     </q-card>
 
+    <!-- QRIS Payment / Seller QRIS Dialog -->
+    <q-dialog v-model="showQrisModal" persistent>
+      <q-card style="width: 380px; max-width: 95vw;" class="rounded-borders card-surface q-pa-md text-center">
+        <q-card-section class="q-pb-none">
+          <div class="text-subtitle1 text-weight-bold text-grey-9 dark-text">Pembayaran QRIS</div>
+          <div class="text-caption text-grey-6">Silakan scan kode QRIS Toko Sembako di bawah ini</div>
+        </q-card-section>
+
+        <q-card-section class="q-py-md flex flex-center column">
+          <!-- Dynamic QRIS code from QRServer API -->
+          <q-img
+            :src="qrisQrUrl"
+            spinner-color="primary"
+            style="width: 220px; height: 220px; border: 1px solid #eee; border-radius: 8px;"
+            class="q-mb-md"
+          />
+
+          <!-- Store Name overlay (highly realistic) -->
+          <div class="text-subtitle2 text-weight-bold text-grey-9 dark-text">TOKO SEMBAKO AGUNG</div>
+          <div class="text-caption text-grey-6">NMID: ID10203040506001</div>
+          
+          <q-separator class="q-my-md full-width opacity-50" />
+
+          <div class="text-subtitle2 text-grey-7">Total yang Harus Dibayar:</div>
+          <div class="text-h5 text-weight-bold text-primary q-mt-xs">
+            {{ formatRupiah(cartTotal) }}
+          </div>
+        </q-card-section>
+
+        <!-- Status Polling Indicator -->
+        <q-card-section class="q-py-xs bg-grey-1 dark-bg-grey rounded-borders row items-center justify-center q-gutter-x-sm">
+          <q-spinner-oval color="primary" size="20px" />
+          <span class="text-caption text-weight-medium text-grey-8 dark-text">Menunggu transfer masuk dari pembeli...</span>
+        </q-card-section>
+
+        <q-card-actions align="center" class="q-mt-md q-gutter-x-sm row no-wrap">
+          <q-btn
+            outline
+            color="negative"
+            label="Batal / Cancel"
+            class="col-6 rounded-borders text-weight-bold"
+            no-caps
+            @click="handleCancelQris"
+          />
+          <q-btn
+            color="primary"
+            label="Simulasi Sukses"
+            class="col-6 rounded-borders text-weight-bold"
+            no-caps
+            icon="bolt"
+            @click="simulateQrisPayment"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <!-- Camera Scanner Dialog -->
     <q-dialog v-model="showScannerDialog" persistent @hide="handleScannerDialogHide">
       <q-card style="width: 350px; max-width: 90vw;" class="card-surface rounded-borders">
@@ -352,7 +408,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { useProductStore } from '../stores/productStore'
 import { useTransactionStore } from '../stores/transactionStore'
@@ -372,6 +428,107 @@ const searchQuery = ref('')
 const searchResults = ref([])
 const paymentMethod = ref('Tunai')
 const customerName = ref('')
+
+// QRIS states
+const showQrisModal = ref(false)
+const pendingTransactionId = ref(null)
+const pollingInterval = ref(null)
+const qrisQrUrl = ref('')
+const backupCartData = ref([])
+
+function getQrisQrUrl(amount) {
+  const amtStr = String(Math.round(amount))
+  const lenStr = String(amtStr.length).padStart(2, '0')
+  // Dynamic realistic QRIS data encoding the actual amount
+  const qrisBase = `00020101021226540014ID102030405060010303UMI51440014ID202412345678020412340303UMI52045411530336054${lenStr}${amtStr}5802ID5918Toko Sembako Agung6009Tangerang62070703***6304`
+  return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrisBase)}`
+}
+
+function startQrisPolling(transactionId, backupCart, checkoutRes) {
+  stopQrisPolling()
+  pollingInterval.value = setInterval(async () => {
+    try {
+      const resStatus = await api.get(`/api/transactions/${transactionId}/status`)
+      if (resStatus.data.status === 'SUCCESS') {
+        stopQrisPolling()
+        
+        receipt.value = {
+          createdAt: checkoutRes.createdAt,
+          paymentMethod: 'QRIS',
+          customerName: checkoutRes.customerName || '',
+          totalPrice: checkoutRes.totalPrice,
+          items: checkoutRes.items,
+          amountPaid: checkoutRes.totalPrice,
+          amountChange: 0
+        }
+        
+        showQrisModal.value = false
+        
+        $q.notify({
+          type: 'positive',
+          message: 'Pembayaran QRIS Diterima! Transaksi Sukses.'
+        })
+        
+        showReceiptDialog.value = true
+      }
+    } catch (err) {
+      console.error("Polling error:", err)
+    }
+  }, 2000)
+}
+
+function stopQrisPolling() {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value)
+    pollingInterval.value = null
+  }
+}
+
+async function handleCancelQris() {
+  $q.loading.show({ message: 'Membatalkan transaksi...' })
+  try {
+    stopQrisPolling()
+    await api.delete(`/api/transactions/${pendingTransactionId.value}/cancel`)
+    
+    // Restore cart items
+    transactionStore.cart = backupCartData.value
+    
+    showQrisModal.value = false
+    pendingTransactionId.value = null
+    
+    $q.notify({
+      type: 'info',
+      message: 'Transaksi QRIS dibatalkan. Stok dikembalikan.'
+    })
+  } catch (err) {
+    console.error("Cancel failed:", err)
+    $q.notify({
+      type: 'negative',
+      message: 'Gagal membatalkan transaksi di server.'
+    })
+  } finally {
+    $q.loading.hide()
+  }
+}
+
+async function simulateQrisPayment() {
+  try {
+    await api.post(`/api/transactions/${pendingTransactionId.value}/simulate-pay`)
+    $q.notify({
+      type: 'info',
+      message: 'Sinyal simulasi pembayaran sukses dikirim.'
+    })
+  } catch (err) {
+    $q.notify({
+      type: 'negative',
+      message: 'Gagal mengirim sinyal simulasi pembayaran.'
+    })
+  }
+}
+
+onUnmounted(() => {
+  stopQrisPolling()
+})
 const amountPaid = ref(null)
 
 const showScannerDialog = ref(false)
@@ -521,9 +678,20 @@ async function handleCheckout() {
     const backupPaid = amountPaid.value || cartTotal.value
     const backupChange = amountChange.value
     
+    backupCartData.value = backupCart
+    
     const res = await transactionStore.checkout(paymentMethod.value, customerName.value)
     
-    // Set receipt data
+    if (paymentMethod.value === 'QRIS') {
+      pendingTransactionId.value = res.id
+      qrisQrUrl.value = getQrisQrUrl(res.totalPrice)
+      showQrisModal.value = true
+      startQrisPolling(res.id, backupCart, res)
+      $q.loading.hide()
+      return
+    }
+
+    // Set receipt data for Cash/Credit
     receipt.value = {
       createdAt: res.createdAt,
       paymentMethod: res.paymentMethod,
@@ -552,7 +720,9 @@ async function handleCheckout() {
       message: errorMsg
     })
   } finally {
-    $q.loading.hide()
+    if (paymentMethod.value !== 'QRIS') {
+      $q.loading.hide()
+    }
   }
 }
 
@@ -589,9 +759,9 @@ async function startScanning() {
     const config = { 
       fps: 10, 
       qrbox: (width, height) => {
-        const rectWidth = Math.min(width * 0.8, 260)
-        const rectHeight = Math.min(height * 0.45, 130)
-        return { width: rectWidth, height: rectHeight }
+        // Square shape supporting both 1D Barcode & 2D QR Code
+        const size = Math.min(width * 0.7, height * 0.7, 240)
+        return { width: size, height: size }
       }
     }
 

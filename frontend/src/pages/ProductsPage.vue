@@ -555,10 +555,9 @@ async function startScanning(target) {
     const config = { 
       fps: 10, 
       qrbox: (width, height) => {
-        // Barcodes are horizontal rectangles
-        const rectWidth = Math.min(width * 0.8, 260)
-        const rectHeight = Math.min(height * 0.45, 130)
-        return { width: rectWidth, height: rectHeight }
+        // Square shape supporting both 1D Barcode & 2D QR Code
+        const size = Math.min(width * 0.7, height * 0.7, 240)
+        return { width: size, height: size }
       }
     }
 
