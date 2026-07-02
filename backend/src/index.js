@@ -1,0 +1,745 @@
+const express = require('express');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { PrismaClient } = require('@prisma/client');
+const auth = require('./middleware/auth');
+require('dotenv').config();
+
+const app = express();
+const prisma = new PrismaClient();
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecret123';
+
+app.use(cors());
+app.use(express.json());
+
+// Logging Middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// ================= AUTHENTICATION ENDPOINTS =================
+
+// 1. Register User
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, name } = req.body;
+
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Nama, Email, dan Password wajib diisi.' });
+    }
+
+    // Check if user already exists
+    const userExists = await prisma.user.findUnique({ where: { email } });
+    if (userExists) {
+      return res.status(400).json({ error: 'Email sudah terdaftar.' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name
+      }
+    });
+
+    // Generate JWT
+    const token = jwt.sign({ id: newUser.id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(201).json({
+      token,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name
+      }
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan server saat mendaftar.' });
+  }
+});
+
+// 2. Login User
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email dan Password wajib diisi.' });
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(400).json({ error: 'Email atau password salah.' });
+    }
+
+    // Compare passwords
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Email atau password salah.' });
+    }
+
+    // Generate JWT
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        parentId: user.parentId
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan server saat login.' });
+  }
+});
+
+// 3. Get Current User Profile (Protected)
+app.get('/api/auth/me', auth, async (req, res) => {
+  res.json(req.user);
+});
+
+// 3.1 Owner Registers a Cashier (Protected - Owner only)
+app.post('/api/auth/cashier', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat mendaftarkan Kasir.' });
+    }
+
+    const { email, password, name } = req.body;
+
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Semua kolom (Email, Password, Nama) wajib diisi.' });
+    }
+
+    // Check if email already registered
+    const emailExists = await prisma.user.findUnique({ where: { email } });
+    if (emailExists) {
+      return res.status(400).json({ error: 'Email sudah terdaftar.' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create cashier linked to this Owner
+    const newCashier = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        role: 'KASIR',
+        parentId: req.user.id
+      }
+    });
+
+    res.status(201).json({
+      message: 'Akun Kasir berhasil didaftarkan.',
+      user: {
+        id: newCashier.id,
+        email: newCashier.email,
+        name: newCashier.name,
+        role: newCashier.role
+      }
+    });
+  } catch (error) {
+    console.error('Register cashier error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan server saat mendaftarkan kasir.' });
+  }
+});
+
+// 3.2 List Owner's Cashiers (Protected - Owner only)
+app.get('/api/auth/cashiers', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak.' });
+    }
+
+    const cashiers = await prisma.user.findMany({
+      where: { parentId: req.user.id, role: 'KASIR' },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(cashiers);
+  } catch (error) {
+    console.error('Fetch cashiers error:', error);
+    res.status(500).json({ error: 'Internal server error while fetching cashiers' });
+  }
+});
+
+// ================= SECURED PRODUCT CRUD ENDPOINTS =================
+
+// Helper to get store owner ID (parentId for cashiers, id for owners)
+const getStoreId = (user) => {
+  return user.role === 'KASIR' ? user.parentId : user.id;
+};
+
+// 4. Get stats for dashboard (Protected)
+app.get('/api/stats', auth, async (req, res) => {
+  try {
+    const storeId = getStoreId(req.user);
+
+    const products = await prisma.product.findMany({ where: { userId: storeId } });
+    
+    let totalStockValue = 0;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+    const categoryCounts = {
+      "Beras & Sembako": 0,
+      "Minyak & Mentega": 0,
+      "Mi & Instan": 0,
+      "Bumbu Dapur": 0,
+      "Minuman": 0,
+      "Sabun & Mandi": 0,
+      "Lainnya": 0
+    };
+
+    products.forEach(p => {
+      totalStockValue += p.stock * p.costPrice;
+      if (p.stock === 0) {
+        outOfStockCount++;
+      } else if (p.stock <= p.minStock) {
+        lowStockCount++;
+      }
+      
+      const cat = p.category || "Lainnya";
+      categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+    });
+
+    res.json({
+      totalProducts: products.length,
+      totalStockValue,
+      lowStockCount,
+      outOfStockCount,
+      categoryCounts
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Internal server error while fetching stats' });
+  }
+});
+
+// 5. Get all products (Protected, filtered by user store)
+app.get('/api/products', auth, async (req, res) => {
+  try {
+    const storeId = getStoreId(req.user);
+    const { search, category, stockStatus } = req.query;
+
+    const where = { userId: storeId };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search } },
+        { description: { contains: search } },
+        { barcode: { contains: search } }
+      ];
+    }
+    if (category) {
+      where.category = category;
+    }
+    if (stockStatus === 'out_of_stock') {
+      where.stock = 0;
+    }
+
+    let products = await prisma.product.findMany({
+      where,
+      orderBy: { name: 'asc' }
+    });
+
+    if (stockStatus === 'low_stock') {
+      products = products.filter(p => p.stock > 0 && p.stock <= p.minStock);
+    }
+
+    res.json(products);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({ error: 'Internal server error while fetching products' });
+  }
+});
+
+// 6. Get product by ID (Protected)
+app.get('/api/products/:id', auth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const storeId = getStoreId(req.user);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+
+    const product = await prisma.product.findFirst({
+      where: { id, userId: storeId }
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found or unauthorized' });
+    }
+
+    res.json(product);
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 7. Create product (Protected - Owner only)
+app.post('/api/products', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat menambahkan barang.' });
+    }
+
+    const storeId = getStoreId(req.user);
+    const { barcode, name, description, stock, minStock, costPrice, sellPrice, unit, category } = req.body;
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Nama produk wajib diisi' });
+    }
+    if (costPrice === undefined || sellPrice === undefined) {
+      return res.status(400).json({ error: 'Harga modal dan harga jual wajib diisi' });
+    }
+
+    // Check barcode duplicate
+    if (barcode && barcode.trim() !== '') {
+      const barcodeExists = await prisma.product.findFirst({ where: { barcode, userId: storeId } });
+      if (barcodeExists) {
+        return res.status(400).json({ error: `Produk dengan barcode ${barcode} sudah terdaftar (${barcodeExists.name})` });
+      }
+    }
+
+    const newProduct = await prisma.product.create({
+      data: {
+        barcode: barcode || "",
+        name,
+        description: description || "",
+        stock: stock !== undefined ? parseInt(stock) : 0,
+        minStock: minStock !== undefined ? parseInt(minStock) : 5,
+        costPrice: parseFloat(costPrice),
+        sellPrice: parseFloat(sellPrice),
+        unit: unit || "pcs",
+        category: category || "Lainnya",
+        userId: storeId
+      }
+    });
+
+    res.status(201).json(newProduct);
+  } catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: 'Internal server error while creating product' });
+  }
+});
+
+// 8. Update product (Protected - Owner only)
+app.put('/api/products/:id', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat mengedit barang.' });
+    }
+
+    const id = parseInt(req.params.id);
+    const storeId = getStoreId(req.user);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+
+    const { barcode, name, description, stock, minStock, costPrice, sellPrice, unit, category } = req.body;
+
+    // Check if product exists and belongs to store
+    const productExists = await prisma.product.findFirst({ where: { id, userId: storeId } });
+    if (!productExists) {
+      return res.status(404).json({ error: 'Product not found or unauthorized' });
+    }
+
+    // Check barcode duplicate
+    if (barcode && barcode.trim() !== '' && barcode !== productExists.barcode) {
+      const barcodeExists = await prisma.product.findFirst({ where: { barcode, userId: storeId, NOT: { id } } });
+      if (barcodeExists) {
+        return res.status(400).json({ error: `Produk dengan barcode ${barcode} sudah terdaftar (${barcodeExists.name})` });
+      }
+    }
+
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data: {
+        barcode: barcode !== undefined ? barcode : undefined,
+        name: name !== undefined ? name : undefined,
+        description: description !== undefined ? description : undefined,
+        stock: stock !== undefined ? parseInt(stock) : undefined,
+        minStock: minStock !== undefined ? parseInt(minStock) : undefined,
+        costPrice: costPrice !== undefined ? parseFloat(costPrice) : undefined,
+        sellPrice: sellPrice !== undefined ? parseFloat(sellPrice) : undefined,
+        unit: unit !== undefined ? unit : undefined,
+        category: category !== undefined ? category : undefined
+      }
+    });
+
+    res.json(updatedProduct);
+  } catch (error) {
+    console.error('Error updating product:', error);
+    res.status(500).json({ error: 'Internal server error while updating product' });
+  }
+});
+
+// 9. Delete product (Protected - Owner only)
+app.delete('/api/products/:id', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat menghapus barang.' });
+    }
+
+    const id = parseInt(req.params.id);
+    const storeId = getStoreId(req.user);
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+
+    // Check if product exists and belongs to store
+    const productExists = await prisma.product.findFirst({ where: { id, userId: storeId } });
+    if (!productExists) {
+      return res.status(404).json({ error: 'Product not found or unauthorized' });
+    }
+
+    await prisma.product.delete({
+      where: { id }
+    });
+
+    res.json({ message: 'Product deleted successfully', id });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ error: 'Internal server error while deleting product' });
+  }
+});
+
+// ================= SECURED TRANSACTION API ENDPOINTS =================
+
+// 10. Create Transaction (Checkout)
+app.post('/api/transactions', auth, async (req, res) => {
+  try {
+    const storeId = getStoreId(req.user);
+    const { paymentMethod, customerName, items } = req.body;
+
+    if (!paymentMethod || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Metode pembayaran dan barang belanjaan wajib diisi.' });
+    }
+
+    if (paymentMethod === 'Bon' && (!customerName || customerName.trim() === '')) {
+      return res.status(400).json({ error: 'Nama pelanggan wajib diisi untuk pembayaran Bon/Utang.' });
+    }
+
+    // Fetch products involved
+    const productIds = items.map(item => item.productId);
+    const dbProducts = await prisma.product.findMany({
+      where: { id: { in: productIds }, userId: storeId }
+    });
+
+    const productMap = new Map(dbProducts.map(p => [p.id, p]));
+
+    // Validate stock and build items list
+    const validatedItems = [];
+    let totalPrice = 0;
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product) {
+        return res.status(400).json({ error: `Barang dengan ID ${item.productId} tidak ditemukan.` });
+      }
+
+      if (product.stock < item.quantity) {
+        return res.status(400).json({ error: `Stok barang "${product.name}" tidak mencukupi (Tersisa: ${product.stock} ${product.unit}).` });
+      }
+
+      validatedItems.push({
+        productId: product.id,
+        quantity: item.quantity,
+        price: product.sellPrice
+      });
+
+      totalPrice += product.sellPrice * item.quantity;
+    }
+
+    // Perform database transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Deduct stock for each item
+      for (const item of validatedItems) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            stock: {
+              decrement: item.quantity
+            }
+          }
+        });
+      }
+
+      // 2. Create Transaction
+      const newTransaction = await tx.transaction.create({
+        data: {
+          totalPrice,
+          paymentMethod,
+          customerName: customerName || "",
+          userId: storeId, // Link to owner's store
+          items: {
+            create: validatedItems.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price
+            }))
+          }
+        },
+        include: {
+          items: {
+            include: {
+              product: true
+            }
+          }
+        }
+      });
+
+      return newTransaction;
+    });
+
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('Error creating transaction:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan server saat memproses transaksi.' });
+  }
+});
+
+// 11. Get all transactions (Protected)
+app.get('/api/transactions', auth, async (req, res) => {
+  try {
+    const storeId = getStoreId(req.user);
+    const { paymentMethod, search } = req.query;
+
+    const where = { userId: storeId };
+
+    if (paymentMethod) {
+      where.paymentMethod = paymentMethod;
+    }
+    if (search) {
+      where.customerName = { contains: search };
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                name: true,
+                unit: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    res.status(500).json({ error: 'Internal server error while fetching transactions' });
+  }
+});
+
+// 11.1 Update Transaction Payment Method (Protected - e.g. pelunasan Bon)
+app.put('/api/transactions/:id', auth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const storeId = getStoreId(req.user);
+    const { paymentMethod } = req.body;
+
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid ID format' });
+    }
+
+    if (!paymentMethod) {
+      return res.status(400).json({ error: 'Metode pembayaran wajib diisi.' });
+    }
+
+    // Check if transaction exists and belongs to store
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId: storeId }
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan atau unauthorized.' });
+    }
+
+    const updatedTransaction = await prisma.transaction.update({
+      where: { id },
+      data: { paymentMethod }
+    });
+
+    res.json(updatedTransaction);
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    res.status(500).json({ error: 'Internal server error while updating transaction' });
+  }
+});
+
+// 12. Get Compiled Reports (Protected - Owner only)
+app.get('/api/reports', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat mengakses laporan keuangan.' });
+    }
+
+    const storeId = getStoreId(req.user);
+    const { filterRange } = req.query;
+
+    const now = new Date();
+    let dateQuery = {};
+
+    if (filterRange === 'hari_ini') {
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      dateQuery = {
+        createdAt: {
+          gte: startOfDay
+        }
+      };
+    } else if (filterRange === 'minggu_ini') {
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dateQuery = {
+        createdAt: {
+          gte: sevenDaysAgo
+        }
+      };
+    } else if (filterRange === 'bulan_ini') {
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dateQuery = {
+        createdAt: {
+          gte: thirtyDaysAgo
+        }
+      };
+    }
+
+    // 1. Fetch transactions within date range
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        userId: storeId,
+        ...dateQuery
+      },
+      include: {
+        items: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    let totalRevenue = 0;
+    let totalCogs = 0;
+    const byPaymentMethod = { Tunai: 0, QRIS: 0, Bon: 0 };
+    const bonList = [];
+
+    transactions.forEach(t => {
+      totalRevenue += t.totalPrice;
+      byPaymentMethod[t.paymentMethod] = (byPaymentMethod[t.paymentMethod] || 0) + t.totalPrice;
+
+      t.items.forEach(item => {
+        totalCogs += item.quantity * (item.product?.costPrice || 0);
+      });
+
+      if (t.paymentMethod === 'Bon') {
+        bonList.push({
+          id: t.id,
+          customerName: t.customerName,
+          totalPrice: t.totalPrice,
+          createdAt: t.createdAt
+        });
+      }
+    });
+
+    const netProfit = totalRevenue - totalCogs;
+
+    // 2. Fetch current stock assets
+    const products = await prisma.product.findMany({
+      where: { userId: storeId }
+    });
+
+    let totalStockValueModal = 0;
+    let totalStockValueJual = 0;
+    let outOfStockCount = 0;
+    let lowStockCount = 0;
+
+    products.forEach(p => {
+      totalStockValueModal += p.stock * p.costPrice;
+      totalStockValueJual += p.stock * p.sellPrice;
+      if (p.stock === 0) {
+        outOfStockCount++;
+      } else if (p.stock <= p.minStock) {
+        lowStockCount++;
+      }
+    });
+
+    const potentialProfit = totalStockValueJual - totalStockValueModal;
+
+    res.json({
+      sales: {
+        totalRevenue,
+        totalTransactions: transactions.length,
+        byPaymentMethod,
+        bonList,
+        transactions: transactions.map(t => ({
+          id: t.id,
+          totalPrice: t.totalPrice,
+          paymentMethod: t.paymentMethod,
+          customerName: t.customerName,
+          createdAt: t.createdAt,
+          itemCount: t.items.reduce((acc, item) => acc + item.quantity, 0)
+        }))
+      },
+      profitAndLoss: {
+        revenue: totalRevenue,
+        cogs: totalCogs,
+        netProfit
+      },
+      stock: {
+        totalStockValueModal,
+        totalStockValueJual,
+        potentialProfit,
+        outOfStockCount,
+        lowStockCount,
+        totalUniqueProducts: products.length
+      }
+    });
+  } catch (error) {
+    console.error('Error compiling reports:', error);
+    res.status(500).json({ error: 'Internal server error while compiling reports' });
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong on the server' });
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Express server running on http://localhost:${PORT}`);
+});

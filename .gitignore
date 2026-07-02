@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment Variables (RAHASIA - jangan pernah di-upload!)
+.env
+.env.local
+.env.production
+**/.env
+
+# Build output
+dist/
+.quasar/
+**/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Prisma generated (will be regenerated)
+backend/node_modules/

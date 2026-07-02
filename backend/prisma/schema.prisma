@@ -1,0 +1,62 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  name         String
+  role         String        @default("OWNER") // "OWNER" or "KASIR"
+  parentId     Int?
+  parent       User?         @relation("UserToSubUsers", fields: [parentId], references: [id], onDelete: Cascade)
+  subUsers     User[]        @relation("UserToSubUsers")
+  products     Product[]
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Product {
+  id               Int               @id @default(autoincrement())
+  barcode          String?           @unique
+  name             String
+  description      String?
+  stock            Int               @default(0)
+  minStock         Int               @default(5)
+  costPrice        Float
+  sellPrice        Float
+  unit             String            @default("pcs")
+  category         String            @default("Lainnya")
+  userId           Int
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionItems TransactionItem[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model Transaction {
+  id            Int               @id @default(autoincrement())
+  totalPrice    Float
+  paymentMethod String            // "Tunai", "QRIS", "Bon"
+  customerName  String?           // For Bon or general reference
+  userId        Int
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items         TransactionItem[]
+  createdAt     DateTime          @default(now())
+}
+
+model TransactionItem {
+  id            Int         @id @default(autoincrement())
+  transactionId Int
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity      Int
+  price         Float       // Selling price at the time of transaction
+}
