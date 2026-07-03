@@ -705,7 +705,6 @@ app.post('/api/products/load-template', auth, async (req, res) => {
 
     const storeId = getStoreId(req.user);
 
-    // List of common Indonesian sembako products
     const templates = [
       // === BAHAN POKOK ===
       { name: "Minyak Goreng Bimoli Refill 1L", barcode: "8992007111018", category: "Minyak & Mentega", costPrice: 17500, sellPrice: 20000, unit: "L", description: "Minyak goreng Bimoli pouch 1 liter" },
@@ -729,24 +728,35 @@ app.post('/api/products/load-template', auth, async (req, res) => {
       { name: "Telur Ayam Negeri 1kg", barcode: null, category: "Beras & Sembako", costPrice: 25000, sellPrice: 28000, unit: "kg", description: "Telur ayam ras negeri segar per kg" },
       { name: "Telur Bebek Mentah", barcode: null, category: "Beras & Sembako", costPrice: 3000, sellPrice: 4000, unit: "butir", description: "Telur bebek segar per butir" },
 
-      // === MI INSTAN & MAKANAN RINGAN ===
+      // === MI INSTAN, POP MIE & MAKANAN RINGAN ===
       { name: "Indomie Mi Instan Goreng 85g", barcode: "089686010098", category: "Mi & Instan", costPrice: 2800, sellPrice: 3500, unit: "pcs", description: "Indomie Goreng Rasa Spesial" },
       { name: "Indomie Rasa Soto Mie 70g", barcode: "089686010142", category: "Mi & Instan", costPrice: 2700, sellPrice: 3300, unit: "pcs", description: "Indomie Kuah Rasa Soto Mie" },
       { name: "Indomie Rasa Ayam Bawang 75g", barcode: "089686010128", category: "Mi & Instan", costPrice: 2700, sellPrice: 3300, unit: "pcs", description: "Indomie Kuah Rasa Ayam Bawang" },
       { name: "Indomie Rasa Kari Ayam 72g", barcode: "089686010159", category: "Mi & Instan", costPrice: 2900, sellPrice: 3600, unit: "pcs", description: "Indomie Kuah Rasa Kari Ayam dengan Bumbu Pasta" },
+      { name: "Indomie Goreng Rasa Aceh 90g", barcode: "089686060130", category: "Mi & Instan", costPrice: 2900, sellPrice: 3600, unit: "pcs", description: "Indomie Goreng Rasa Khas Aceh Tebal" },
+      { name: "Indomie Goreng Rasa Rendang 91g", barcode: "089686015505", category: "Mi & Instan", costPrice: 2900, sellPrice: 3600, unit: "pcs", description: "Indomie Goreng Rasa Rendang khas Minang" },
+      { name: "Indomie Goreng Sambal Matah 85g", barcode: "089686043132", category: "Mi & Instan", costPrice: 2900, sellPrice: 3600, unit: "pcs", description: "Indomie Goreng Rasa Sambal Matah Khas Bali" },
+      { name: "Indomie Goreng Hype Abis Ayam Geprek 85g", barcode: "089686043231", category: "Mi & Instan", costPrice: 2900, sellPrice: 3600, unit: "pcs", description: "Indomie Goreng Hype Abis Rasa Ayam Geprek Pedas" },
+      { name: "Indomie Rasa Kaldu Ayam 75g", barcode: "089686010111", category: "Mi & Instan", costPrice: 2600, sellPrice: 3200, unit: "pcs", description: "Indomie kuah kaldu ayam klasik" },
+      { name: "Indomie Rasa Ayam Spesial 75g", barcode: "089686010135", category: "Mi & Instan", costPrice: 2700, sellPrice: 3300, unit: "pcs", description: "Indomie kuah rasa ayam spesial gurih" },
       { name: "Mie Sedaap Goreng 90g", barcode: "8998866200549", category: "Mi & Instan", costPrice: 2700, sellPrice: 3300, unit: "pcs", description: "Mie Sedaap Goreng dengan kriuk bawang" },
       { name: "Mie Sedaap Rasa Soto 75g", barcode: "8998866200518", category: "Mi & Instan", costPrice: 2750, sellPrice: 3300, unit: "pcs", description: "Mie Sedaap Kuah Rasa Soto Koya" },
       { name: "Mie Sedaap Kari Spesial 75g", barcode: "8998866200525", category: "Mi & Instan", costPrice: 2850, sellPrice: 3500, unit: "pcs", description: "Mie Sedaap Kuah Kari Spesial Kental" },
       { name: "Sarimi Duo Rasa Ayam Bawang 115g", barcode: "089686010340", category: "Mi & Instan", costPrice: 3300, sellPrice: 4000, unit: "pcs", description: "Sarimi porsi dobel rasa Ayam Bawang" },
       { name: "Supermi Rasa Ayam Bawang 70g", barcode: "089686010012", category: "Mi & Instan", costPrice: 2600, sellPrice: 3200, unit: "pcs", description: "Supermi kuah rasa ayam bawang klasik" },
       { name: "Bihun Jagung Pilihan Miki 350g", barcode: "8992742110034", category: "Mi & Instan", costPrice: 6000, sellPrice: 8000, unit: "pcs", description: "Bihun jagung kering isi 4 keping" },
+      { name: "Pop Mie Cup Rasa Baso 75g", barcode: "089686020028", category: "Mi & Instan", costPrice: 4300, sellPrice: 5000, unit: "cup", description: "Pop Mie kuah rasa baso sapi" },
+      { name: "Pop Mie Cup Rasa Soto Ayam 75g", barcode: "089686020042", category: "Mi & Instan", costPrice: 4300, sellPrice: 5000, unit: "cup", description: "Pop Mie kuah rasa soto ayam hangat" },
+      { name: "Pop Mie Cup Rasa Ayam Bawang 75g", barcode: "089686020011", category: "Mi & Instan", costPrice: 4300, sellPrice: 5000, unit: "cup", description: "Pop Mie kuah rasa ayam bawang gurih" },
+      { name: "Pop Mie Cup Goreng Spesial 80g", barcode: "089686020257", category: "Mi & Instan", costPrice: 4500, sellPrice: 5500, unit: "cup", description: "Pop Mie goreng rasa spesial" },
+      { name: "Pop Mie Pedas Dower Rasa Ayam Pedas 75g", barcode: "089686003250", category: "Mi & Instan", costPrice: 4600, sellPrice: 5500, unit: "cup", description: "Pop Mie rasa ayam pedas dower ekstra pedas" },
       { name: "Sarden ABC Saus Tomat 155g", barcode: "8991389170123", category: "Lainnya", costPrice: 8500, sellPrice: 10500, unit: "kaleng", description: "Sarden kaleng ABC rasa tomat kecil" },
       { name: "Sarden ABC Saus Tomat 425g", barcode: "8991389170246", category: "Lainnya", costPrice: 19500, sellPrice: 23000, unit: "kaleng", description: "Sarden kaleng ABC rasa tomat besar" },
       { name: "Biskuit Roma Kelapa 300g", barcode: "8996001301018", category: "Lainnya", costPrice: 8500, sellPrice: 11000, unit: "pcs", description: "Biskuit Roma kelapa gurih" },
       { name: "Oreo Sandwich Vanilla 133g", barcode: "7622210390123", category: "Lainnya", costPrice: 7500, sellPrice: 9500, unit: "pcs", description: "Biskuit Oreo isi krim vanilla" },
       { name: "Khong Guan Assorted Biscuits 650g", barcode: "8992015100011", category: "Lainnya", costPrice: 48000, sellPrice: 55000, unit: "kaleng", description: "Biskuit aneka rasa Khong Guan Kaleng Merah" },
 
-      // === MINUMAN & SUSU ===
+      // === MINUMAN, KOPI SACHET & SUSU ===
       { name: "Aqua Air Mineral Botol 600ml", barcode: "8886008101053", category: "Minuman", costPrice: 2500, sellPrice: 3500, unit: "botol", description: "Air mineral Aqua tanggung 600ml" },
       { name: "Aqua Air Mineral Botol 1500ml", barcode: "8886008101077", category: "Minuman", costPrice: 5000, sellPrice: 6500, unit: "botol", description: "Air mineral Aqua besar 1.5L" },
       { name: "Aqua Galon 19L (Isi Ulang)", barcode: "8886008101015", category: "Minuman", costPrice: 18000, sellPrice: 22000, unit: "galon", description: "Isi ulang air galon Aqua asli" },
@@ -757,8 +767,17 @@ app.post('/api/products/load-template', auth, async (req, res) => {
       { name: "Fanta Strawberry Botol 390ml", barcode: "8992741130026", category: "Minuman", costPrice: 4300, sellPrice: 5500, unit: "botol", description: "Minuman bersoda Fanta rasa stroberi kecil" },
       { name: "Sprite Botol 390ml", barcode: "8992741140025", category: "Minuman", costPrice: 4300, sellPrice: 5500, unit: "botol", description: "Minuman bersoda Sprite rasa lemon-lime kecil" },
       { name: "Kopi Kapal Api Special Mix (Renteng)", barcode: "8991002101234", category: "Minuman", costPrice: 11500, sellPrice: 13500, unit: "renteng", description: "Kopi bubuk Kapal Api sachet isi 10" },
+      { name: "Kopi Kapal Api Mantap Hitam (Renteng)", barcode: "8991002101111", category: "Minuman", costPrice: 10500, sellPrice: 12500, unit: "renteng", description: "Kopi hitam manis Kapal Api renteng isi 10" },
       { name: "Kopi Luwak White Koffie (Renteng)", barcode: "8991206101018", category: "Minuman", costPrice: 12000, sellPrice: 14500, unit: "renteng", description: "Kopi Luwak White Koffie sachet isi 10" },
       { name: "Kopi Torabika Duo (Renteng)", barcode: "8996001401015", category: "Minuman", costPrice: 11000, sellPrice: 13000, unit: "renteng", description: "Kopi Torabika hitam manis sachet isi 10" },
+      { name: "Kopi Torabika Creamy Latte (Renteng)", barcode: "8996001402227", category: "Minuman", costPrice: 13500, sellPrice: 16000, unit: "renteng", description: "Kopi latte Torabika dengan gula terpisah isi 10" },
+      { name: "Kopi ABC Susu (Renteng)", barcode: "8991002120020", category: "Minuman", costPrice: 12000, sellPrice: 14000, unit: "renteng", description: "Kopi ABC Susu sachet renteng isi 10" },
+      { name: "Kopi ABC Mocca (Renteng)", barcode: "8991002120037", category: "Minuman", costPrice: 12000, sellPrice: 14000, unit: "renteng", description: "Kopi ABC Mocca sachet renteng isi 10" },
+      { name: "Kopi Good Day Moccacino (Renteng)", barcode: "8991002230040", category: "Minuman", costPrice: 12500, sellPrice: 15000, unit: "renteng", description: "Kopi Good Day rasa moccacino isi 10" },
+      { name: "Kopi Good Day Caribbean Nut (Renteng)", barcode: "8991002230057", category: "Minuman", costPrice: 12500, sellPrice: 15000, unit: "renteng", description: "Kopi Good Day rasa hazelnut karibia isi 10" },
+      { name: "Kopi Neo Coffee Tiramisu (Renteng)", barcode: "8991002250109", category: "Minuman", costPrice: 10000, sellPrice: 12000, unit: "renteng", description: "Kopi Neo Coffee rasa tiramisu isi 10" },
+      { name: "Kopi Indocafe Coffeemix (Renteng)", barcode: "8998811101235", category: "Minuman", costPrice: 13000, sellPrice: 15500, unit: "renteng", description: "Kopi 3-in-1 Indocafe Coffeemix isi 10" },
+      { name: "Kopi Caffino Classic (Renteng)", barcode: "8997232230101", category: "Minuman", costPrice: 12000, sellPrice: 14500, unit: "renteng", description: "Kopi latte Caffino Classic isi 10" },
       { name: "Teh Celup Sariwangi Isi 25", barcode: "8999999023456", category: "Minuman", costPrice: 5500, sellPrice: 7000, unit: "pcs", description: "Teh celup hitam Sariwangi kotak isi 25" },
       { name: "Frisian Flag Kental Manis Putih Kaleng 370g", barcode: "8992753100017", category: "Minuman", costPrice: 11000, sellPrice: 13000, unit: "kaleng", description: "Susu kental manis Frisian Flag putih kaleng" },
       { name: "Frisian Flag Kental Manis Cokelat Kaleng 370g", barcode: "8992753100024", category: "Minuman", costPrice: 11000, sellPrice: 13000, unit: "kaleng", description: "Susu kental manis Frisian Flag cokelat kaleng" },
@@ -800,6 +819,17 @@ app.post('/api/products/load-template', auth, async (req, res) => {
       { name: "Shampoo Pantene Anti Dandruff 150ml", barcode: "4902430901234", category: "Sabun & Mandi", costPrice: 18500, sellPrice: 22000, unit: "botol", description: "Sampo Pantene anti ketombe" },
       { name: "Shampoo Clear Men Menthol 160ml", barcode: "8999999031246", category: "Sabun & Mandi", costPrice: 20000, sellPrice: 24500, unit: "botol", description: "Sampo khusus pria Clear Men" },
       { name: "Shampoo Sunsilk Black Shine 160ml", barcode: "8999999032519", category: "Sabun & Mandi", costPrice: 17500, sellPrice: 21500, unit: "botol", description: "Sampo Sunsilk urang aring hitam" },
+
+      // === PRODUK ROKOK (LAINNYA) ===
+      { name: "Rokok Sampoerna A Mild 16", barcode: "8999909003889", category: "Lainnya", costPrice: 32000, sellPrice: 35000, unit: "bungkus", description: "Rokok Sampoerna A Mild isi 16 batang" },
+      { name: "Rokok Gudang Garam Filter 12", barcode: "8998989100125", category: "Lainnya", costPrice: 23000, sellPrice: 25000, unit: "bungkus", description: "Rokok Gudang Garam Filter isi 12 batang" },
+      { name: "Rokok Gudang Garam Surya 16", barcode: "8998989300167", category: "Lainnya", costPrice: 30000, sellPrice: 33000, unit: "bungkus", description: "Rokok Gudang Garam Surya isi 16 batang" },
+      { name: "Rokok Djarum Super 16", barcode: "8992689200164", category: "Lainnya", costPrice: 31000, sellPrice: 34000, unit: "bungkus", description: "Rokok Djarum Super isi 16 batang" },
+      { name: "Rokok Marlboro Merah 20", barcode: "7622100723467", category: "Lainnya", costPrice: 41000, sellPrice: 45000, unit: "bungkus", description: "Rokok Marlboro Filter Red isi 20 batang" },
+      { name: "Rokok Dji Sam Soe 234 Kretek 12", barcode: "8999909001038", category: "Lainnya", costPrice: 19000, sellPrice: 21000, unit: "bungkus", description: "Rokok kretek Dji Sam Soe isi 12 batang" },
+      { name: "Rokok LA Bold 20", barcode: "8992689001556", category: "Lainnya", costPrice: 31000, sellPrice: 33000, unit: "bungkus", description: "Rokok LA Bold filter hitam isi 20 batang" },
+
+      // === LAIN-LAIN ===
       { name: "Baygon Aerosol Fresh Scent 600ml", barcode: "8999999023412", category: "Lainnya", costPrice: 32000, sellPrice: 38000, unit: "botol", description: "Obat nyamuk semprot Baygon jumbo" },
       { name: "Tissue Paseo Smart 250 Sheets", barcode: "8993053011019", category: "Lainnya", costPrice: 11000, sellPrice: 14000, unit: "pcs", description: "Tisu wajah Paseo kemasan hemat 250 lembar" }
     ];
