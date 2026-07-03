@@ -122,14 +122,14 @@
         </q-card-section>
 
         <q-card-section class="q-pa-md">
-          <!-- Simulated Email Box -->
+          <!-- Real Email Notification Box -->
           <div class="bg-blue-1 text-blue-9 q-pa-md rounded-borders border-dashed q-mb-md text-caption">
             <div class="row items-center q-mb-xs">
-              <q-icon name="info" size="18px" class="q-mr-xs" />
-              <strong>Simulasi Pengiriman Email:</strong>
+              <q-icon name="mark_email_read" size="18px" class="q-mr-xs text-primary" />
+              <strong class="text-primary">Email Verifikasi Terkirim!</strong>
             </div>
-            Kode OTP verifikasi pendaftaran untuk email <strong class="text-primary">{{ email }}</strong> adalah <strong class="text-primary text-subtitle2">{{ simulatedOtp }}</strong>.
-            (Gunakan kode ini di bawah untuk memverifikasi pendaftaran Anda).
+            Kami telah mengirimkan kode OTP verifikasi pendaftaran ke email <strong>{{ email }}</strong>. Cek kotak masuk atau folder spam Anda.<br/>
+            <span class="text-grey-7 text-weight-medium text-italic block q-mt-xs">* Untuk kemudahan uji coba instan: kode OTP Anda adalah <strong>{{ simulatedOtp }}</strong></span>
           </div>
 
           <div class="text-caption text-grey-7 q-mb-md">

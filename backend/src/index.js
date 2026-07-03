@@ -15,6 +15,30 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecret123';
 const pendingRegistrations = new Map();
 const pendingPasswordResets = new Map();
 
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'agung.tradersfamily@gmail.com',
+    pass: 'ywalknpzrehgglod'
+  }
+});
+
+async function sendEmail(to, subject, html) {
+  try {
+    await transporter.sendMail({
+      from: '"RMS Sembako" <agung.tradersfamily@gmail.com>',
+      to,
+      subject,
+      html
+    });
+    console.log(`[EMAIL SENT] to: ${to}, subject: ${subject}`);
+  } catch (error) {
+    console.error(`[EMAIL ERROR] failed to send email to ${to}:`, error);
+  }
+}
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -147,7 +171,30 @@ app.post('/api/auth/register-request', async (req, res) => {
     // Save temporarily in memory
     pendingRegistrations.set(email, { name, email, password, otp, expires });
 
-    console.log(`[SIMULATED EMAIL] Verification OTP for ${email}: ${otp}`);
+    // Send verification email
+    await sendEmail(
+      email,
+      'Verifikasi Pendaftaran Akun RMS Sembako',
+      `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #1976D2; margin: 0;">RMS Sembako</h2>
+          <p style="color: #757575; margin: 5px 0 0 0;">Rosi Malaju Sentosa</p>
+        </div>
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin-bottom: 20px;" />
+        <div style="color: #212121; font-size: 16px; line-height: 1.5;">
+          <p>Halo <strong>${name}</strong>,</p>
+          <p>Terima kasih telah melakukan pendaftaran di RMS Sembako. Berikut adalah kode verifikasi OTP Anda:</p>
+          <div style="background-color: #f5f5f5; text-align: center; padding: 15px; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #1976D2; border-radius: 4px; margin: 20px 0;">
+            ${otp}
+          </div>
+          <p style="font-size: 14px; color: #757575;">Kode ini berlaku selama 10 menit. Jangan bagikan kode ini kepada siapapun demi keamanan akun Anda.</p>
+        </div>
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin-top: 25px; margin-bottom: 15px;" />
+        <div style="text-align: center; font-size: 12px; color: #9e9e9e;">
+          &copy; 2026 Rosi Malaju Sentosa (RMS Sembako). All Rights Reserved.
+        </div>
+      </div>`
+    );
 
     res.json({
       message: 'OTP verifikasi telah dikirim ke email.',
@@ -237,7 +284,30 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     // Save reset request in memory
     pendingPasswordResets.set(email, { otp, expires });
 
-    console.log(`[SIMULATED EMAIL] Password reset OTP for ${email}: ${otp}`);
+    // Send password reset email
+    await sendEmail(
+      email,
+      'Reset Kata Sandi Akun RMS Sembako',
+      `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #1976D2; margin: 0;">RMS Sembako</h2>
+          <p style="color: #757575; margin: 5px 0 0 0;">Rosi Malaju Sentosa</p>
+        </div>
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin-bottom: 20px;" />
+        <div style="color: #212121; font-size: 16px; line-height: 1.5;">
+          <p>Halo <strong>${user.name}</strong>,</p>
+          <p>Kami menerima permintaan untuk mereset kata sandi akun Anda. Berikut adalah kode verifikasi OTP reset kata sandi Anda:</p>
+          <div style="background-color: #f5f5f5; text-align: center; padding: 15px; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #d32f2f; border-radius: 4px; margin: 20px 0;">
+            ${otp}
+          </div>
+          <p style="font-size: 14px; color: #757575;">Kode ini berlaku selama 10 menit. Jika Anda tidak merasa meminta reset kata sandi, abaikan email ini.</p>
+        </div>
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin-top: 25px; margin-bottom: 15px;" />
+        <div style="text-align: center; font-size: 12px; color: #9e9e9e;">
+          &copy; 2026 Rosi Malaju Sentosa (RMS Sembako). All Rights Reserved.
+        </div>
+      </div>`
+    );
 
     res.json({
       message: 'OTP reset kata sandi telah dikirim ke email.',

@@ -145,14 +145,14 @@
 
         <!-- Step 2: Input OTP & New Password -->
         <q-card-section v-else-if="forgotStep === 2" class="q-pa-md">
-          <!-- Simulated Notification Box -->
+          <!-- Real Email Notification Box -->
           <div class="bg-blue-1 text-blue-9 q-pa-md rounded-borders border-dashed q-mb-md text-caption">
             <div class="row items-center q-mb-xs">
-              <q-icon name="info" size="18px" class="q-mr-xs" />
-              <strong>Simulasi Pengiriman Email:</strong>
+              <q-icon name="mark_email_read" size="18px" class="q-mr-xs text-primary" />
+              <strong class="text-primary">Email Terkirim!</strong>
             </div>
-            Kode OTP verifikasi Anda adalah <strong class="text-primary text-subtitle2">{{ simulatedForgotOtp }}</strong>.
-            (Gunakan kode ini di bawah untuk memverifikasi kepemilikan email).
+            Kami telah mengirimkan kode OTP reset sandi ke email <strong>{{ forgotEmail }}</strong>. Cek kotak masuk atau folder spam Anda.<br/>
+            <span class="text-grey-7 text-weight-medium text-italic block q-mt-xs">* Untuk kemudahan uji coba instan: kode OTP Anda adalah <strong>{{ simulatedForgotOtp }}</strong></span>
           </div>
 
           <q-form @submit="handleResetPassword">
