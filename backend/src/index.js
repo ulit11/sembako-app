@@ -108,7 +108,81 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 3. Get Current User Profile (Protected)
 app.get('/api/auth/me', auth, async (req, res) => {
-  res.json(req.user);
+  try {
+    if (req.user.role === 'KASIR') {
+      const owner = await prisma.user.findUnique({
+        where: { id: req.user.parentId },
+        select: {
+          name: true,
+          qrisImage: true,
+          bankName: true,
+          bankAccount: true,
+          bankAccountName: true
+        }
+      });
+      if (owner) {
+        return res.json({
+          ...req.user,
+          storeName: owner.name,
+          qrisImage: owner.qrisImage,
+          bankName: owner.bankName,
+          bankAccount: owner.bankAccount,
+          bankAccountName: owner.bankAccountName
+        });
+      }
+    }
+    
+    // Default Owner or fallback
+    res.json({
+      ...req.user,
+      storeName: req.user.name
+    });
+  } catch (error) {
+    console.error('Error fetching user me:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan saat memproses profil pengguna.' });
+  }
+});
+
+// 3.01 Update Owner Shop Settings (Protected - Owner only)
+app.put('/api/auth/settings', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat mengubah pengaturan.' });
+    }
+
+    const { name, qrisImage, bankName, bankAccount, bankAccountName } = req.body;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        name: name !== undefined ? name : undefined,
+        qrisImage: qrisImage !== undefined ? qrisImage : undefined,
+        bankName: bankName !== undefined ? bankName : undefined,
+        bankAccount: bankAccount !== undefined ? bankAccount : undefined,
+        bankAccountName: bankAccountName !== undefined ? bankAccountName : undefined
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        parentId: true,
+        qrisImage: true,
+        bankName: true,
+        bankAccount: true,
+        bankAccountName: true,
+        balance: true
+      }
+    });
+
+    res.json({
+      message: 'Pengaturan toko berhasil diperbarui.',
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Update settings error:', error);
+    res.status(500).json({ error: 'Terjadi kesalahan server saat memperbarui pengaturan.' });
+  }
 });
 
 // 3.1 Owner Registers a Cashier (Protected - Owner only)
@@ -496,7 +570,7 @@ app.post('/api/transactions', auth, async (req, res) => {
         data: {
           totalPrice,
           paymentMethod,
-          status: paymentMethod === 'QRIS' ? 'PENDING' : 'SUCCESS',
+          status: (paymentMethod === 'QRIS' || paymentMethod === 'Transfer') ? 'PENDING' : 'SUCCESS',
           customerName: customerName || "",
           userId: storeId, // Link to owner's store
           items: {
@@ -548,7 +622,7 @@ app.get('/api/transactions/:id/status', auth, async (req, res) => {
   }
 });
 
-// 10.2 Simulate QRIS Payment Callback (Public - Simulation Webhook)
+// 10.2 Simulate QRIS/Transfer Payment Callback (Public - Simulation Webhook)
 app.post('/api/transactions/:id/simulate-pay', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -564,18 +638,35 @@ app.post('/api/transactions/:id/simulate-pay', async (req, res) => {
     if (tx.status === 'SUCCESS') {
       return res.json({ message: 'Pembayaran sudah sukses sebelumnya.', transaction: tx });
     }
-    const updatedTx = await prisma.transaction.update({
-      where: { id },
-      data: { status: 'SUCCESS' },
-      include: {
-        items: {
-          include: {
-            product: true
+    
+    // Update transaction to SUCCESS and increment owner's balance in a transaction
+    const result = await prisma.$transaction(async (prismaTx) => {
+      const updatedTx = await prismaTx.transaction.update({
+        where: { id },
+        data: { status: 'SUCCESS' },
+        include: {
+          items: {
+            include: {
+              product: true
+            }
           }
         }
-      }
+      });
+
+      // Increment owner's balance
+      await prismaTx.user.update({
+        where: { id: updatedTx.userId },
+        data: {
+          balance: {
+            increment: updatedTx.totalPrice
+          }
+        }
+      });
+
+      return updatedTx;
     });
-    res.json({ message: 'Pembayaran QRIS berhasil disimulasikan.', transaction: updatedTx });
+
+    res.json({ message: 'Pembayaran berhasil disimulasikan.', transaction: result });
   } catch (error) {
     console.error('Error simulating payment:', error);
     res.status(500).json({ error: 'Internal server error during payment simulation' });

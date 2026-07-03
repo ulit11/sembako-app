@@ -8,18 +8,23 @@ generator client {
 }
 
 model User {
-  id           Int           @id @default(autoincrement())
-  email        String        @unique
-  password     String
-  name         String
-  role         String        @default("OWNER") // "OWNER" or "KASIR"
-  parentId     Int?
-  parent       User?         @relation("UserToSubUsers", fields: [parentId], references: [id], onDelete: Cascade)
-  subUsers     User[]        @relation("UserToSubUsers")
-  products     Product[]
-  transactions Transaction[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id              Int           @id @default(autoincrement())
+  email           String        @unique
+  password        String
+  name            String
+  role            String        @default("OWNER") // "OWNER" or "KASIR"
+  parentId        Int?
+  parent          User?         @relation("UserToSubUsers", fields: [parentId], references: [id], onDelete: Cascade)
+  subUsers        User[]        @relation("UserToSubUsers")
+  products        Product[]
+  transactions    Transaction[]
+  qrisImage       String?       @db.LongText
+  bankName        String?
+  bankAccount     String?
+  bankAccountName String?
+  balance         Float         @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 model Product {

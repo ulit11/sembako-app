@@ -249,26 +249,67 @@
       </q-card-section>
     </q-card>
 
-    <!-- QRIS Payment / Seller QRIS Dialog -->
-    <q-dialog v-model="showQrisModal" persistent>
+    <!-- Non-Tunai Payment (QRIS & Transfer) Pending Dialog -->
+    <q-dialog v-model="showPendingModal" persistent>
       <q-card style="width: 380px; max-width: 95vw;" class="rounded-borders card-surface q-pa-md text-center">
         <q-card-section class="q-pb-none">
-          <div class="text-subtitle1 text-weight-bold text-grey-9 dark-text">Pembayaran QRIS</div>
-          <div class="text-caption text-grey-6">Silakan scan kode QRIS Toko Sembako di bawah ini</div>
+          <div class="text-subtitle1 text-weight-bold text-grey-9 dark-text">
+            {{ paymentMethod === 'QRIS' ? 'Pembayaran QRIS' : 'Transfer Bank' }}
+          </div>
+          <div class="text-caption text-grey-6">
+            {{ paymentMethod === 'QRIS' ? 'Silakan scan kode QRIS Toko Sembako di bawah ini' : 'Silakan transfer ke rekening toko di bawah ini' }}
+          </div>
         </q-card-section>
 
         <q-card-section class="q-py-md flex flex-center column">
-          <!-- Dynamic QRIS code from QRServer API -->
-          <q-img
-            :src="qrisQrUrl"
-            spinner-color="primary"
-            style="width: 220px; height: 220px; border: 1px solid #eee; border-radius: 8px;"
-            class="q-mb-md"
-          />
+          <!-- QRIS Section -->
+          <div v-if="paymentMethod === 'QRIS'" class="column items-center full-width">
+            <!-- Custom QRIS Image or Fallback QR Code -->
+            <q-img
+              :src="authStore.user?.qrisImage || qrisQrUrl"
+              spinner-color="primary"
+              style="width: 220px; height: 220px; border: 1px solid #eee; border-radius: 8px;"
+              class="q-mb-md"
+            />
+            <div class="text-subtitle2 text-weight-bold text-grey-9 dark-text">{{ authStore.user?.storeName || 'TOKO SEMBAKO' }}</div>
+            <div class="text-caption text-grey-6">NMID: ID10203040506001</div>
+          </div>
 
-          <!-- Store Name overlay (highly realistic) -->
-          <div class="text-subtitle2 text-weight-bold text-grey-9 dark-text">TOKO SEMBAKO AGUNG</div>
-          <div class="text-caption text-grey-6">NMID: ID10203040506001</div>
+          <!-- Transfer Bank Section -->
+          <div v-else-if="paymentMethod === 'Transfer'" class="full-width q-gutter-y-sm text-left">
+            <div v-if="authStore.user?.bankName" class="bg-blue-1 text-blue-9 q-pa-md rounded-borders border-dashed" style="border-width: 1px;">
+              <div class="q-mb-xs">
+                <span class="text-caption block text-grey-6">Nama Bank:</span>
+                <span class="text-subtitle2 text-weight-bold text-grey-9 dark-text">{{ authStore.user.bankName }}</span>
+              </div>
+              <div class="q-mb-xs row items-center justify-between no-wrap">
+                <div>
+                  <span class="text-caption block text-grey-6">Nomor Rekening:</span>
+                  <span class="text-subtitle2 text-weight-bold text-primary">{{ authStore.user.bankAccount }}</span>
+                </div>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  color="primary"
+                  icon="content_copy"
+                  size="sm"
+                  @click="copyText(authStore.user.bankAccount)"
+                >
+                  <q-tooltip>Salin Rekening</q-tooltip>
+                </q-btn>
+              </div>
+              <div>
+                <span class="text-caption block text-grey-6">Atas Nama (A/N):</span>
+                <span class="text-subtitle2 text-weight-bold text-grey-9 dark-text">{{ authStore.user.bankAccountName }}</span>
+              </div>
+            </div>
+            <div v-else class="text-center text-amber-9 q-pa-md bg-amber-1 rounded-borders full-width">
+              <q-icon name="warning" size="28px" class="q-mb-xs" />
+              <div class="text-caption text-weight-bold">Informasi Rekening Belum Diatur</div>
+              <div class="text-caption" style="font-size: 11px;">Minta Owner untuk mengatur bank di menu Pengaturan.</div>
+            </div>
+          </div>
           
           <q-separator class="q-my-md full-width opacity-50" />
 
@@ -281,10 +322,10 @@
         <!-- Status Polling Indicator -->
         <q-card-section class="q-py-xs bg-grey-1 dark-bg-grey rounded-borders row items-center justify-center q-gutter-x-sm">
           <q-spinner-oval color="primary" size="20px" />
-          <span class="text-caption text-weight-medium text-grey-8 dark-text">Menunggu transfer masuk dari pembeli...</span>
+          <span class="text-caption text-weight-medium text-grey-8 dark-text">Menunggu dana masuk ke rekening...</span>
         </q-card-section>
 
-        <q-card-actions align="center" class="q-mt-md q-gutter-x-sm row no-wrap">
+        <q-card-actions align="center" class="q-mt-md q-gutter-x-sm row no-wrap full-width">
           <q-btn
             outline
             color="negative"
@@ -304,6 +345,7 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
 
     <!-- Camera Scanner Dialog -->
     <q-dialog v-model="showScannerDialog" persistent @hide="handleScannerDialogHide">
@@ -429,12 +471,21 @@ const searchResults = ref([])
 const paymentMethod = ref('Tunai')
 const customerName = ref('')
 
-// QRIS states
-const showQrisModal = ref(false)
+// Non-tunai pending payment states
+const showPendingModal = ref(false)
 const pendingTransactionId = ref(null)
 const pollingInterval = ref(null)
 const qrisQrUrl = ref('')
 const backupCartData = ref([])
+
+function copyText(text) {
+  navigator.clipboard.writeText(text)
+  $q.notify({
+    type: 'positive',
+    message: 'Nomor rekening berhasil disalin!',
+    timeout: 1000
+  })
+}
 
 function getQrisQrUrl(amount) {
   const amtStr = String(Math.round(amount))
@@ -454,7 +505,7 @@ function startQrisPolling(transactionId, backupCart, checkoutRes) {
         
         receipt.value = {
           createdAt: checkoutRes.createdAt,
-          paymentMethod: 'QRIS',
+          paymentMethod: checkoutRes.paymentMethod,
           customerName: checkoutRes.customerName || '',
           totalPrice: checkoutRes.totalPrice,
           items: checkoutRes.items,
@@ -462,11 +513,11 @@ function startQrisPolling(transactionId, backupCart, checkoutRes) {
           amountChange: 0
         }
         
-        showQrisModal.value = false
+        showPendingModal.value = false
         
         $q.notify({
           type: 'positive',
-          message: 'Pembayaran QRIS Diterima! Transaksi Sukses.'
+          message: `Pembayaran ${checkoutRes.paymentMethod} Diterima! Transaksi Sukses.`
         })
         
         showReceiptDialog.value = true
@@ -493,12 +544,12 @@ async function handleCancelQris() {
     // Restore cart items
     transactionStore.cart = backupCartData.value
     
-    showQrisModal.value = false
+    showPendingModal.value = false
     pendingTransactionId.value = null
     
     $q.notify({
       type: 'info',
-      message: 'Transaksi QRIS dibatalkan. Stok dikembalikan.'
+      message: 'Transaksi dibatalkan. Stok dikembalikan.'
     })
   } catch (err) {
     console.error("Cancel failed:", err)
@@ -550,6 +601,7 @@ const checkoutForm = ref(null)
 const paymentMethods = [
   { label: 'Tunai / Cash', value: 'Tunai' },
   { label: 'QRIS Cashless', value: 'QRIS' },
+  { label: 'Transfer Bank', value: 'Transfer' },
   { label: 'Bon / Utang', value: 'Bon' }
 ]
 
@@ -682,10 +734,10 @@ async function handleCheckout() {
     
     const res = await transactionStore.checkout(paymentMethod.value, customerName.value)
     
-    if (paymentMethod.value === 'QRIS') {
+    if (paymentMethod.value === 'QRIS' || paymentMethod.value === 'Transfer') {
       pendingTransactionId.value = res.id
       qrisQrUrl.value = getQrisQrUrl(res.totalPrice)
-      showQrisModal.value = true
+      showPendingModal.value = true
       startQrisPolling(res.id, backupCart, res)
       $q.loading.hide()
       return
@@ -720,7 +772,7 @@ async function handleCheckout() {
       message: errorMsg
     })
   } finally {
-    if (paymentMethod.value !== 'QRIS') {
+    if (paymentMethod.value !== 'QRIS' && paymentMethod.value !== 'Transfer') {
       $q.loading.hide()
     }
   }

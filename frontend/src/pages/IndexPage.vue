@@ -22,18 +22,38 @@
       </q-card-section>
     </q-card>
 
-    <!-- Capital Value Card (Total Investasi Modal) - Only for Owner -->
-    <q-card v-if="authStore.user?.role === 'OWNER'" class="q-mb-md shadow-1 rounded-borders card-surface text-center q-pa-md">
-      <div class="text-caption text-grey-6 text-weight-medium uppercase tracking-wider">
-        Total Investasi Modal (Stok Barang)
+    <!-- Financial Metrics (Owner Only) -->
+    <div v-if="authStore.user?.role === 'OWNER'" class="row q-col-gutter-sm q-mb-md">
+      <!-- Saldo Toko (QRIS & Transfer) -->
+      <div class="col-6">
+        <q-card class="shadow-1 rounded-borders card-surface text-center q-pa-sm" style="min-height: 120px; display: flex; flex-direction: column; justify-content: center;">
+          <div class="text-caption text-grey-6 text-weight-medium uppercase tracking-wider">
+            Saldo Rekening Toko
+          </div>
+          <div class="text-h6 text-weight-bold text-green-7 q-mt-xs">
+            {{ formatRupiah(authStore.user?.balance || 0) }}
+          </div>
+          <div class="text-caption text-grey-5 q-mt-xs leading-none">
+            Dari QRIS & Transfer Bank
+          </div>
+        </q-card>
       </div>
-      <div class="text-h4 text-weight-bold text-primary q-mt-xs">
-        {{ formatRupiah(stats.totalStockValue) }}
+
+      <!-- Capital Value (Total Investasi Modal) -->
+      <div class="col-6">
+        <q-card class="shadow-1 rounded-borders card-surface text-center q-pa-sm" style="min-height: 120px; display: flex; flex-direction: column; justify-content: center;">
+          <div class="text-caption text-grey-6 text-weight-medium uppercase tracking-wider">
+            Investasi Modal
+          </div>
+          <div class="text-h6 text-weight-bold text-primary q-mt-xs">
+            {{ formatRupiah(stats.totalStockValue) }}
+          </div>
+          <div class="text-caption text-grey-5 q-mt-xs leading-none">
+            Total HPP modal stok
+          </div>
+        </q-card>
       </div>
-      <div class="text-caption text-grey-5 q-mt-xs">
-        Berdasarkan total harga modal barang yang tersedia
-      </div>
-    </q-card>
+    </div>
 
     <!-- Stats Summary Section -->
     <div class="row q-col-gutter-sm q-mb-md">
@@ -230,6 +250,7 @@ const cashierForm = ref({
 
 onMounted(async () => {
   await productStore.fetchStats()
+  await authStore.fetchCurrentUser()
   if (authStore.user?.role === 'OWNER') {
     await fetchCashiers()
   }

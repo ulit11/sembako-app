@@ -16,7 +16,18 @@ const auth = async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, name: true, role: true, parentId: true } // Don't return password hashed
+      select: { 
+        id: true, 
+        email: true, 
+        name: true, 
+        role: true, 
+        parentId: true,
+        qrisImage: true,
+        bankName: true,
+        bankAccount: true,
+        bankAccountName: true,
+        balance: true
+      }
     });
 
     if (!user) {

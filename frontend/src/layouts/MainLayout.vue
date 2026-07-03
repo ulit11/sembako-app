@@ -76,6 +76,14 @@
           icon="assessment"
           label="Laporan"
         />
+        <q-route-tab
+          v-if="authStore.user?.role === 'OWNER'"
+          name="settings"
+          to="/settings"
+          exact
+          icon="settings"
+          label="Pengaturan"
+        />
       </q-tabs>
     </q-footer>
   </q-layout>
