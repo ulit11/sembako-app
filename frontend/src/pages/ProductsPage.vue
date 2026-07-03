@@ -179,7 +179,7 @@
           </div>
         </q-card-section>
 
-        <q-card-section class="q-pa-md">
+        <q-card-section class="q-pa-md scroll" style="max-height: 70vh;">
           <q-form @submit="handleSubmit" class="q-gutter-y-xs">
             <!-- Barcode -->
             <q-input
@@ -322,7 +322,7 @@
             />
 
             <!-- Form Actions -->
-            <div class="row justify-end q-gutter-x-sm q-mt-md">
+            <div class="row justify-end q-gutter-x-sm q-mt-lg q-pb-md">
               <q-btn flat label="Batal" color="grey-7" no-caps v-close-popup />
               <q-btn type="submit" :label="isEditMode ? 'Simpan' : 'Tambah'" color="primary" no-caps class="text-weight-bold" />
             </div>
@@ -388,7 +388,7 @@ const form = ref({
   category: 'Beras & Sembako',
   unit: 'pcs',
   stock: 0,
-  minStock: 5,
+  minStock: 1,
   costPrice: 0,
   sellPrice: 0
 })
@@ -443,12 +443,9 @@ function getCategoryColor(cat) {
 }
 
 function formatRupiah(val) {
-  if (!val) return 'Rp 0'
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0
-  }).format(val)
+  if (val === undefined || val === null || val === '') return 'Rp 0'
+  const number = Math.round(Number(val))
+  return 'Rp ' + number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
 
 function openAddDialog() {
@@ -461,7 +458,7 @@ function openAddDialog() {
     category: 'Beras & Sembako',
     unit: 'pcs',
     stock: 0,
-    minStock: 5,
+    minStock: 1,
     costPrice: 0,
     sellPrice: 0
   }

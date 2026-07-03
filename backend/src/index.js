@@ -12,7 +12,8 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret123';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Logging Middleware
 app.use((req, res, next) => {
@@ -391,17 +392,19 @@ app.post('/api/products', auth, async (req, res) => {
       return res.status(400).json({ error: 'Harga modal dan harga jual wajib diisi' });
     }
 
+    const barcodeValue = (barcode && barcode.trim() !== '') ? barcode.trim() : null;
+
     // Check barcode duplicate
-    if (barcode && barcode.trim() !== '') {
-      const barcodeExists = await prisma.product.findFirst({ where: { barcode, userId: storeId } });
+    if (barcodeValue) {
+      const barcodeExists = await prisma.product.findFirst({ where: { barcode: barcodeValue, userId: storeId } });
       if (barcodeExists) {
-        return res.status(400).json({ error: `Produk dengan barcode ${barcode} sudah terdaftar (${barcodeExists.name})` });
+        return res.status(400).json({ error: `Produk dengan barcode ${barcodeValue} sudah terdaftar (${barcodeExists.name})` });
       }
     }
 
     const newProduct = await prisma.product.create({
       data: {
-        barcode: barcode || "",
+        barcode: barcodeValue,
         name,
         description: description || "",
         stock: stock !== undefined ? parseInt(stock) : 0,
@@ -443,18 +446,20 @@ app.put('/api/products/:id', auth, async (req, res) => {
       return res.status(404).json({ error: 'Product not found or unauthorized' });
     }
 
+    const barcodeValue = barcode !== undefined ? ((barcode && barcode.trim() !== '') ? barcode.trim() : null) : undefined;
+
     // Check barcode duplicate
-    if (barcode && barcode.trim() !== '' && barcode !== productExists.barcode) {
-      const barcodeExists = await prisma.product.findFirst({ where: { barcode, userId: storeId, NOT: { id } } });
+    if (barcodeValue && barcodeValue !== productExists.barcode) {
+      const barcodeExists = await prisma.product.findFirst({ where: { barcode: barcodeValue, userId: storeId, NOT: { id } } });
       if (barcodeExists) {
-        return res.status(400).json({ error: `Produk dengan barcode ${barcode} sudah terdaftar (${barcodeExists.name})` });
+        return res.status(400).json({ error: `Produk dengan barcode ${barcodeValue} sudah terdaftar (${barcodeExists.name})` });
       }
     }
 
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: {
-        barcode: barcode !== undefined ? barcode : undefined,
+        barcode: barcodeValue,
         name: name !== undefined ? name : undefined,
         description: description !== undefined ? description : undefined,
         stock: stock !== undefined ? parseInt(stock) : undefined,
@@ -493,8 +498,15 @@ app.delete('/api/products/:id', auth, async (req, res) => {
       return res.status(404).json({ error: 'Product not found or unauthorized' });
     }
 
-    await prisma.product.delete({
-      where: { id }
+    await prisma.$transaction(async (prismaTx) => {
+      // 1. Delete all referencing transaction items first to prevent foreign key errors
+      await prismaTx.transactionItem.deleteMany({
+        where: { productId: id }
+      });
+      // 2. Delete the product itself
+      await prismaTx.product.delete({
+        where: { id }
+      });
     });
 
     res.json({ message: 'Product deleted successfully', id });

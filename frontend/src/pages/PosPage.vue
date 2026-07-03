@@ -779,12 +779,9 @@ async function handleCheckout() {
 }
 
 function formatRupiah(val) {
-  if (!val) return 'Rp 0'
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0
-  }).format(val)
+  if (val === undefined || val === null || val === '') return 'Rp 0'
+  const number = Math.round(Number(val))
+  return 'Rp ' + number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
 
 function formatDateTime(dateStr) {
