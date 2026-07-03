@@ -128,8 +128,7 @@
               <q-icon name="mark_email_read" size="18px" class="q-mr-xs text-primary" />
               <strong class="text-primary">Email Verifikasi Terkirim!</strong>
             </div>
-            Kami telah mengirimkan kode OTP verifikasi pendaftaran ke email <strong>{{ email }}</strong>. Cek kotak masuk atau folder spam Anda.<br/>
-            <span class="text-grey-7 text-weight-medium text-italic block q-mt-xs">* Untuk kemudahan uji coba instan: kode OTP Anda adalah <strong>{{ simulatedOtp }}</strong></span>
+            Kami telah mengirimkan kode OTP verifikasi pendaftaran ke email <strong>{{ email }}</strong>. Cek kotak masuk atau folder spam Anda.
           </div>
 
           <div class="text-caption text-grey-7 q-mb-md">
