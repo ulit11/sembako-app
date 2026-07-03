@@ -162,7 +162,7 @@
     <q-card
       v-if="stats.lowStockCount > 0 || stats.outOfStockCount > 0"
       class="q-mb-md text-white shadow-1 text-center border-glow cursor-pointer bg-warning"
-      @click="goToProductsWithStatus('low_stock')"
+      @click="goToProductsWithStatus('restock')"
     >
       <q-card-section class="q-py-md">
         <div class="row items-center justify-center text-grey-9">

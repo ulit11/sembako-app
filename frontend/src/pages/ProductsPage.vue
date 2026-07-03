@@ -406,6 +406,7 @@ const categoryOptions = [
 
 const stockStatusOptions = [
   { label: 'Semua Status', value: '' },
+  { label: 'Perlu Kulakan', value: 'restock' },
   { label: 'Stok Menipis', value: 'low_stock' },
   { label: 'Stok Habis', value: 'out_of_stock' }
 ]

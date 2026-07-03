@@ -2,13 +2,11 @@
   <q-layout view="lHh Lpr lFf" class="mobile-layout shadow-10">
     <q-header elevated class="bg-primary text-white">
       <q-toolbar class="q-py-sm">
-        <q-avatar size="36px" class="q-mr-sm bg-white text-primary">
-          <q-icon name="storefront" size="24px" />
-        </q-avatar>
+        <rms-logo size="32px" class="q-mr-sm" />
 
         <q-toolbar-title class="text-weight-bold">
-          SembakoApp
-          <span class="text-subtitle2 block text-weight-regular text-grey-3">Stok Toko Sembako</span>
+          RMS Sembako
+          <span class="text-subtitle2 block text-weight-regular text-grey-3">Rosi Malaju Sentosa</span>
         </q-toolbar-title>
 
         <q-btn
@@ -94,6 +92,7 @@ import { ref } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
+import RmsLogo from '../components/RmsLogo.vue'
 
 const $q = useQuasar()
 const router = useRouter()

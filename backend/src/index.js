@@ -11,6 +11,10 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret123';
 
+// In-memory verification codes storage
+const pendingRegistrations = new Map();
+const pendingPasswordResets = new Map();
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -67,25 +71,34 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// 2. Login User
+// 2. Login User (Supports Email or Username/Name)
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const identifier = req.body.identifier || req.body.email;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email dan Password wajib diisi.' });
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Email/Username dan Password wajib diisi.' });
     }
 
-    // Find user
-    const user = await prisma.user.findUnique({ where: { email } });
+    // Find user by email OR name (username)
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: identifier },
+          { name: identifier }
+        ]
+      }
+    });
+
     if (!user) {
-      return res.status(400).json({ error: 'Email atau password salah.' });
+      return res.status(400).json({ error: 'Email/Username atau password salah.' });
     }
 
     // Compare passwords
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ error: 'Email atau password salah.' });
+      return res.status(400).json({ error: 'Email/Username atau password salah.' });
     }
 
     // Generate JWT
@@ -104,6 +117,178 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Terjadi kesalahan server saat login.' });
+  }
+});
+
+// Helper: Generate 6-digit OTP
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// 2a. Request Email Verification (OTP Registration)
+app.post('/api/auth/register-request', async (req, res) => {
+  try {
+    const { email, password, name } = req.body;
+
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'Nama, Email, dan Password wajib diisi.' });
+    }
+
+    // Check if user already exists
+    const userExists = await prisma.user.findUnique({ where: { email } });
+    if (userExists) {
+      return res.status(400).json({ error: 'Email sudah terdaftar.' });
+    }
+
+    // Generate OTP
+    const otp = generateOtp();
+    const expires = Date.now() + 10 * 60 * 1000; // 10 minutes expiry
+
+    // Save temporarily in memory
+    pendingRegistrations.set(email, { name, email, password, otp, expires });
+
+    console.log(`[SIMULATED EMAIL] Verification OTP for ${email}: ${otp}`);
+
+    res.json({
+      message: 'OTP verifikasi telah dikirim ke email.',
+      email,
+      otp // Return OTP in response for client-side demo/testing simulation
+    });
+  } catch (error) {
+    console.error('Register request error:', error);
+    res.status(500).json({ error: 'Gagal mengirim OTP pendaftaran.' });
+  }
+});
+
+// 2b. Verify OTP and Complete Registration
+app.post('/api/auth/register-verify', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email dan Kode OTP wajib diisi.' });
+    }
+
+    const pending = pendingRegistrations.get(email);
+    if (!pending) {
+      return res.status(400).json({ error: 'Tidak ada permintaan pendaftaran untuk email ini.' });
+    }
+
+    if (Date.now() > pending.expires) {
+      pendingRegistrations.delete(email);
+      return res.status(400).json({ error: 'Kode OTP telah kadaluarsa. Silakan daftar kembali.' });
+    }
+
+    if (pending.otp !== otp) {
+      return res.status(400).json({ error: 'Kode OTP yang Anda masukkan salah.' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(pending.password, 10);
+
+    // Create user in DB
+    const newUser = await prisma.user.create({
+      data: {
+        email: pending.email,
+        password: hashedPassword,
+        name: pending.name
+      }
+    });
+
+    // Remove from in-memory pending map
+    pendingRegistrations.delete(email);
+
+    // Generate JWT
+    const token = jwt.sign({ id: newUser.id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(201).json({
+      token,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name
+      }
+    });
+  } catch (error) {
+    console.error('Register verify error:', error);
+    res.status(500).json({ error: 'Gagal memverifikasi pendaftaran.' });
+  }
+});
+
+// 2c. Request Forgot Password OTP
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email wajib diisi.' });
+    }
+
+    // Check if user exists in database
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: 'Email tidak terdaftar di sistem.' });
+    }
+
+    // Generate OTP
+    const otp = generateOtp();
+    const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    // Save reset request in memory
+    pendingPasswordResets.set(email, { otp, expires });
+
+    console.log(`[SIMULATED EMAIL] Password reset OTP for ${email}: ${otp}`);
+
+    res.json({
+      message: 'OTP reset kata sandi telah dikirim ke email.',
+      email,
+      otp // Return OTP in response for client-side demo/testing simulation
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Gagal memproses lupa kata sandi.' });
+  }
+});
+
+// 2d. Verify Reset Password OTP and Change Password
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ error: 'Email, OTP, dan Kata Sandi Baru wajib diisi.' });
+    }
+
+    const resetRequest = pendingPasswordResets.get(email);
+    if (!resetRequest) {
+      return res.status(400).json({ error: 'Tidak ada permintaan reset sandi untuk email ini.' });
+    }
+
+    if (Date.now() > resetRequest.expires) {
+      pendingPasswordResets.delete(email);
+      return res.status(400).json({ error: 'Kode OTP reset sandi telah kadaluarsa.' });
+    }
+
+    if (resetRequest.otp !== otp) {
+      return res.status(400).json({ error: 'Kode OTP yang Anda masukkan salah.' });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user in DB
+    await prisma.user.update({
+      where: { email },
+      data: { password: hashedPassword }
+    });
+
+    // Remove from in-memory pending map
+    pendingPasswordResets.delete(email);
+
+    res.json({ message: 'Kata sandi berhasil diperbarui. Silakan login kembali.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Gagal memperbarui kata sandi.' });
   }
 });
 
@@ -341,6 +526,8 @@ app.get('/api/products', auth, async (req, res) => {
 
     if (stockStatus === 'low_stock') {
       products = products.filter(p => p.stock > 0 && p.stock <= p.minStock);
+    } else if (stockStatus === 'restock') {
+      products = products.filter(p => p.stock <= p.minStock);
     }
 
     res.json(products);
