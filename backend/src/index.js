@@ -691,6 +691,175 @@ app.post('/api/products', auth, async (req, res) => {
   }
 });
 
+// 7b. Load Sembako Template (Protected - Restricted to test accounts)
+app.post('/api/products/load-template', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat memuat template.' });
+    }
+
+    const allowedEmails = ['watisulistiyo69@gmail.com', 'agung.ulit@gmail.com'];
+    if (!allowedEmails.includes(req.user.email)) {
+      return res.status(403).json({ error: 'Fitur template ini sementara hanya tersedia untuk akun uji coba khusus.' });
+    }
+
+    const storeId = getStoreId(req.user);
+
+    // List of common Indonesian sembako products
+    const templates = [
+      // Bahan Pokok
+      { name: "Minyak Goreng Bimoli 1L", barcode: "8992007111018", category: "Bahan Pokok", costPrice: 17500, sellPrice: 20000, unit: "L", description: "Minyak goreng Bimoli pouch 1 liter" },
+      { name: "Minyak Goreng Sania 2L", barcode: "8992819200213", category: "Bahan Pokok", costPrice: 33000, sellPrice: 37500, unit: "L", description: "Minyak goreng Sania pouch 2 liter" },
+      { name: "Gula Pasir Gulaku Premium 1kg", barcode: "8992745100018", category: "Bahan Pokok", costPrice: 15000, sellPrice: 18000, unit: "kg", description: "Gula pasir Gulaku kemasan premium 1kg" },
+      { name: "Terigu Segitiga Biru 1kg", barcode: "8998866100214", category: "Bahan Pokok", costPrice: 11000, sellPrice: 13500, unit: "kg", description: "Tepung terigu serbaguna Segitiga Biru 1kg" },
+      { name: "Beras Ramos 5kg", barcode: "8999909201018", category: "Bahan Pokok", costPrice: 65000, sellPrice: 75000, unit: "karung", description: "Beras Ramos IR64 kemasan 5kg" },
+      { name: "Telur Ayam Negeri 1kg", barcode: null, category: "Bahan Pokok", costPrice: 25000, sellPrice: 28000, unit: "kg", description: "Telur ayam ras negeri segar" },
+      
+      // Makanan / Mi Instan
+      { name: "Indomie Mi Instan Goreng 85g", barcode: "089686010098", category: "Makanan", costPrice: 2800, sellPrice: 3500, unit: "pcs", description: "Indomie Goreng Rasa Spesial" },
+      { name: "Indomie Rasa Soto Mie 70g", barcode: "089686010142", category: "Makanan", costPrice: 2700, sellPrice: 3300, unit: "pcs", description: "Indomie Kuah Rasa Soto Mie" },
+      { name: "Indomie Rasa Ayam Bawang 75g", barcode: "089686010128", category: "Makanan", costPrice: 2700, sellPrice: 3300, unit: "pcs", description: "Indomie Kuah Rasa Ayam Bawang" },
+      { name: "Mie Sedaap Goreng 90g", barcode: "8998866200549", category: "Makanan", costPrice: 2700, sellPrice: 3300, unit: "pcs", description: "Mie Sedaap Goreng dengan kriuk" },
+      
+      // Minuman
+      { name: "Aqua Air Mineral Botol 600ml", barcode: "8886008101053", category: "Minuman", costPrice: 2500, sellPrice: 3500, unit: "botol", description: "Air mineral Aqua tanggung 600ml" },
+      { name: "Teh Pucuk Harum 350ml", barcode: "8992222055621", category: "Minuman", costPrice: 3000, sellPrice: 4000, unit: "botol", description: "Teh melati manis Teh Pucuk Harum" },
+      { name: "Kopi Kapal Api Mantap 165g", barcode: "8991002101234", category: "Minuman", costPrice: 12500, sellPrice: 15000, unit: "pcs", description: "Kopi bubuk Kapal Api Special Mix" },
+      
+      // Bumbu Dapur & Sambal
+      { name: "Kecap Manis Bango Refill 220ml", barcode: "8999999057635", category: "Bumbu Dapur", costPrice: 9000, sellPrice: 11000, unit: "pcs", description: "Kecap manis Bango pouch kecil" },
+      { name: "Royco Kaldu Ayam 120g", barcode: "8999999050018", category: "Bumbu Dapur", costPrice: 4500, sellPrice: 5500, unit: "pcs", description: "Penyedap rasa kaldu ayam Royco" },
+      { name: "Garam Dapur Segitiga G 250g", barcode: "8991234567890", category: "Bumbu Dapur", costPrice: 2000, sellPrice: 3000, unit: "pcs", description: "Garam meja halus beryodium" },
+      
+      // Kebutuhan Rumah Tangga
+      { name: "Sunlight Jeruk Nipis Refill 650ml", barcode: "8999999041238", category: "Kebutuhan Rumah Tangga", costPrice: 13500, sellPrice: 16000, unit: "pcs", description: "Cairan pencuci piring Sunlight pouch" },
+      { name: "Rinso Liquid Deterjen 700ml", barcode: "8999999034568", category: "Kebutuhan Rumah Tangga", costPrice: 18000, sellPrice: 22000, unit: "pcs", description: "Rinso deterjen cair botol/pouch" },
+      { name: "Sabun Lifebuoy Merah 110g", barcode: "8999999012344", category: "Kebutuhan Rumah Tangga", costPrice: 3500, sellPrice: 4500, unit: "pcs", description: "Sabun mandi batang Lifebuoy Red" },
+      { name: "Pepsodent Pasta Gigi Cavity 190g", barcode: "8999999002345", category: "Kebutuhan Rumah Tangga", costPrice: 10500, sellPrice: 13000, unit: "pcs", description: "Pasta gigi Pepsodent putih besar" }
+    ];
+
+    let createdCount = 0;
+    for (const t of templates) {
+      if (t.barcode) {
+        const dup = await prisma.product.findFirst({
+          where: { barcode: t.barcode, userId: storeId }
+        });
+        if (dup) continue;
+      } else {
+        const dup = await prisma.product.findFirst({
+          where: { name: t.name, userId: storeId }
+        });
+        if (dup) continue;
+      }
+
+      await prisma.product.create({
+        data: {
+          ...t,
+          stock: 0,
+          minStock: 5,
+          userId: storeId
+        }
+      });
+      createdCount++;
+    }
+
+    res.json({ message: `Berhasil memuat ${createdCount} produk template sembako.` });
+  } catch (error) {
+    console.error('Error loading template:', error);
+    res.status(500).json({ error: 'Gagal memuat template produk.' });
+  }
+});
+
+// 7c. Batch Import Products (Protected - Restricted to test accounts)
+app.post('/api/products/batch', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Akses ditolak. Hanya Pemilik Toko (Owner) yang dapat mengimpor barang.' });
+    }
+
+    const allowedEmails = ['watisulistiyo69@gmail.com', 'agung.ulit@gmail.com'];
+    if (!allowedEmails.includes(req.user.email)) {
+      return res.status(403).json({ error: 'Fitur import massal ini sementara hanya tersedia untuk akun uji coba khusus.' });
+    }
+
+    const storeId = getStoreId(req.user);
+    const { products } = req.body;
+
+    if (!Array.isArray(products)) {
+      return res.status(400).json({ error: 'Format data tidak valid. Wajib berupa array produk.' });
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i];
+      const { barcode, name, description, stock, minStock, costPrice, sellPrice, unit, category } = p;
+
+      if (!name || name.trim() === '') {
+        errorCount++;
+        errors.push(`Baris ${i + 1}: Nama produk kosong`);
+        continue;
+      }
+
+      if (costPrice === undefined || sellPrice === undefined || isNaN(parseFloat(costPrice)) || isNaN(parseFloat(sellPrice))) {
+        errorCount++;
+        errors.push(`Baris ${i + 1} (${name}): Harga modal atau harga jual wajib berupa angka`);
+        continue;
+      }
+
+      const barcodeValue = (barcode && String(barcode).trim() !== '') ? String(barcode).trim() : null;
+
+      if (barcodeValue) {
+        const dup = await prisma.product.findFirst({
+          where: { barcode: barcodeValue, userId: storeId }
+        });
+        if (dup) {
+          errorCount++;
+          errors.push(`Baris ${i + 1} (${name}): Barcode ${barcodeValue} sudah terdaftar (${dup.name})`);
+          continue;
+        }
+      } else {
+        const dup = await prisma.product.findFirst({
+          where: { name: name.trim(), userId: storeId }
+        });
+        if (dup) {
+          errorCount++;
+          errors.push(`Baris ${i + 1} (${name}): Produk dengan nama ini sudah terdaftar`);
+          continue;
+        }
+      }
+
+      await prisma.product.create({
+        data: {
+          barcode: barcodeValue,
+          name: name.trim(),
+          description: description || "",
+          stock: stock !== undefined ? parseInt(stock) : 0,
+          minStock: minStock !== undefined ? parseInt(minStock) : 5,
+          costPrice: parseFloat(costPrice),
+          sellPrice: parseFloat(sellPrice),
+          unit: unit || "pcs",
+          category: category || "Lainnya",
+          userId: storeId
+        }
+      });
+      successCount++;
+    }
+
+    res.json({
+      message: `Berhasil mengimpor ${successCount} produk.`,
+      successCount,
+      errorCount,
+      errors
+    });
+  } catch (error) {
+    console.error('Error importing batch products:', error);
+    res.status(500).json({ error: 'Gagal mengimpor produk secara massal.' });
+  }
+});
+
 // 8. Update product (Protected - Owner only)
 app.put('/api/products/:id', auth, async (req, res) => {
   try {

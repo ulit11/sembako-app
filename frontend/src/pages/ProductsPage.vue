@@ -3,16 +3,60 @@
     <!-- Header with Action -->
     <div class="row justify-between items-center q-mb-md">
       <div class="text-h6 text-weight-bold text-grey-9 dark-text">Stok Sembako</div>
-      <q-btn
-        v-if="authStore.user?.role === 'OWNER'"
-        color="primary"
-        icon="add"
-        label="Tambah Barang"
-        no-caps
-        class="rounded-borders text-weight-bold"
-        @click="openAddDialog"
-      />
+      <div class="row q-gutter-x-sm items-center">
+        <!-- Opsi A & B (Restricted to Test Users) -->
+        <template v-if="isAllowedTestUser">
+          <q-btn-dropdown
+            color="secondary"
+            icon="auto_awesome"
+            label="Pilihan Uji Coba"
+            no-caps
+            class="rounded-borders text-weight-bold"
+          >
+            <q-list style="min-width: 250px;">
+              <q-item clickable v-close-popup @click="loadSembakoTemplate">
+                <q-item-section avatar>
+                  <q-icon name="download" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="text-weight-bold">Opsi A: Muat Template</q-item-label>
+                  <q-item-label caption>Muat ~20 produk sembako terpopuler</q-item-label>
+                </q-item-section>
+              </q-item>
+
+              <q-item clickable v-close-popup @click="triggerCSVImport">
+                <q-item-section avatar>
+                  <q-icon name="upload_file" color="secondary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="text-weight-bold">Opsi B: Import CSV</q-item-label>
+                  <q-item-label caption>Upload massal lewat file CSV</q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </q-btn-dropdown>
+        </template>
+
+        <q-btn
+          v-if="authStore.user?.role === 'OWNER'"
+          color="primary"
+          icon="add"
+          label="Tambah Barang"
+          no-caps
+          class="rounded-borders text-weight-bold"
+          @click="openAddDialog"
+        />
+      </div>
     </div>
+
+    <!-- Hidden File Input for CSV Import -->
+    <input
+      type="file"
+      ref="csvFileInput"
+      style="display: none"
+      accept=".csv"
+      @change="handleCSVFileChange"
+    />
 
     <!-- Search & Filters -->
     <q-card class="q-mb-md shadow-1 rounded-borders card-surface">
@@ -355,19 +399,27 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuasar } from 'quasar'
 import { useProductStore } from '../stores/productStore'
 import { useAuthStore } from '../stores/authStore'
 import { storeToRefs } from 'pinia'
 import { Html5Qrcode } from 'html5-qrcode'
+import { api } from '../boot/axios'
 
 const $q = useQuasar()
 const route = useRoute()
 const productStore = useProductStore()
 const authStore = useAuthStore()
 const { products } = storeToRefs(productStore)
+
+const isAllowedTestUser = computed(() => {
+  const allowed = ['watisulistiyo69@gmail.com', 'agung.ulit@gmail.com']
+  return allowed.includes(authStore.user?.email)
+})
+
+const csvFileInput = ref(null)
 
 const searchQuery = ref('')
 const selectedCategory = ref('')
@@ -537,6 +589,143 @@ function confirmDelete(product) {
       $q.loading.hide()
     }
   })
+}
+
+// ================= TEST ACTIONS: TEMPLATE & CSV IMPORT =================
+
+async function loadSembakoTemplate() {
+  $q.dialog({
+    title: 'Muat Template Sembako',
+    message: 'Apakah Anda ingin memuat ~20 produk sembako populer (Minyak, Beras, Indomie, dll.) ke toko Anda secara otomatis?',
+    cancel: { label: 'Batal', flat: true, color: 'grey-7' },
+    ok: { label: 'Muat Produk', color: 'primary', flat: true },
+    persistent: true
+  }).onOk(async () => {
+    $q.loading.show({ message: 'Memuat template sembako...' })
+    try {
+      const response = await api.post('/api/products/load-template')
+      $q.notify({
+        type: 'positive',
+        message: response.data.message || 'Template sembako berhasil dimuat!'
+      })
+      await loadProducts()
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || 'Gagal memuat template sembako.'
+      $q.notify({
+        type: 'negative',
+        message: errorMsg
+      })
+    } finally {
+      $q.loading.hide()
+    }
+  })
+}
+
+function triggerCSVImport() {
+  csvFileInput.value.click()
+}
+
+function handleCSVFileChange(event) {
+  const file = event.target.files[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    const text = e.target.result
+    try {
+      const parsedProducts = parseCSV(text)
+      if (parsedProducts.length === 0) {
+        $q.notify({
+          type: 'negative',
+          message: 'File CSV kosong atau tidak memiliki header yang sesuai.'
+        })
+        return
+      }
+
+      $q.dialog({
+        title: 'Konfirmasi Impor Massal',
+        message: `Ditemukan ${parsedProducts.length} produk di dalam file CSV. Lanjutkan impor massal ke sistem?`,
+        cancel: { label: 'Batal', flat: true, color: 'grey-7' },
+        ok: { label: 'Impor Sekarang', color: 'primary', flat: true },
+        persistent: true
+      }).onOk(async () => {
+        $q.loading.show({ message: 'Mengimpor produk...' })
+        try {
+          const response = await api.post('/api/products/batch', { products: parsedProducts })
+          const { successCount, errorCount, errors } = response.data
+          
+          if (errorCount > 0) {
+            $q.dialog({
+              title: 'Hasil Impor Massal',
+              message: `Berhasil mengimpor ${successCount} produk.<br/>Gagal mengimpor ${errorCount} produk.<br/><br/><strong>Detail Error:</strong><br/><div class="text-caption text-red" style="max-height: 150px; overflow-y: auto; text-align: left;">${errors.join('<br/>')}</div>`,
+              html: true,
+              ok: { label: 'Tutup', color: 'primary' }
+            })
+          } else {
+            $q.notify({
+              type: 'positive',
+              message: `Impor massal berhasil! ${successCount} produk ditambahkan.`
+            })
+          }
+          await loadProducts()
+        } catch (error) {
+          const errorMsg = error.response?.data?.error || 'Gagal mengimpor produk secara massal.'
+          $q.notify({
+            type: 'negative',
+            message: errorMsg
+          })
+        } finally {
+          $q.loading.hide()
+        }
+      })
+    } catch (err) {
+      $q.notify({
+        type: 'negative',
+        message: 'Gagal membaca/memformat file CSV. Pastikan format file Anda benar.'
+      })
+    }
+  }
+  reader.readAsText(file)
+  event.target.value = ''
+}
+
+function parseCSV(text) {
+  const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const lines = cleanText.split('\n')
+  if (lines.length < 2) return []
+
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''))
+  const result = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    // Basic splitter supporting quoted fields
+    const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',')
+    const cleanFields = matches.map(f => f.trim().replace(/^["']|["']$/g, ''))
+
+    const product = {}
+    headers.forEach((header, index) => {
+      const val = cleanFields[index] || ''
+      const normalizedHeader = header.toLowerCase()
+      
+      if (normalizedHeader === 'barcode') product.barcode = val || null
+      else if (normalizedHeader === 'name' || normalizedHeader === 'nama') product.name = val
+      else if (normalizedHeader === 'description' || normalizedHeader === 'deskripsi') product.description = val
+      else if (normalizedHeader === 'stock' || normalizedHeader === 'stok') product.stock = parseInt(val) || 0
+      else if (normalizedHeader === 'minstock' || normalizedHeader === 'stokminimal') product.minStock = parseInt(val) || 5
+      else if (normalizedHeader === 'costprice' || normalizedHeader === 'hargabeli' || normalizedHeader === 'modal') product.costPrice = parseFloat(val) || 0
+      else if (normalizedHeader === 'sellprice' || normalizedHeader === 'hargajual') product.sellPrice = parseFloat(val) || 0
+      else if (normalizedHeader === 'unit' || normalizedHeader === 'satuan') product.unit = val || 'pcs'
+      else if (normalizedHeader === 'category' || normalizedHeader === 'kategori') product.category = val || 'Lainnya'
+    })
+
+    if (product.name) {
+      result.push(product)
+    }
+  }
+  return result
 }
 
 // ================= CAMERA SCANNER LOGIC =================
