@@ -15,27 +15,37 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecret123';
 const pendingRegistrations = new Map();
 const pendingPasswordResets = new Map();
 
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'agung.ulit@gmail.com',
-    pass: 'ywalknpzrehgglod'
-  }
-});
-
 async function sendEmail(to, subject, html) {
   try {
-    await transporter.sendMail({
-      from: '"RMS Sembako" <agung.ulit@gmail.com>',
-      to,
-      subject,
-      html
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+      console.warn('[EMAIL WARNING] BREVO_API_KEY is not set. Email will not be sent.');
+      return;
+    }
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'content-type': 'application/json',
+        'api-key': apiKey
+      },
+      body: JSON.stringify({
+        sender: { name: "RMS Sembako", email: "agung.ulit@gmail.com" },
+        to: [{ email: to }],
+        subject: subject,
+        htmlContent: html
+      })
     });
-    console.log(`[EMAIL SENT] to: ${to}, subject: ${subject}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`[EMAIL SENT VIA HTTP] to: ${to}, messageId:`, data.messageId);
+    } else {
+      const errData = await response.json().catch(() => ({}));
+      console.error(`[EMAIL ERROR VIA HTTP] failed response from Brevo:`, errData);
+    }
   } catch (error) {
-    console.error(`[EMAIL ERROR] failed to send email to ${to}:`, error);
+    console.error(`[EMAIL ERROR VIA HTTP] failed to send email to ${to}:`, error.message);
   }
 }
 
@@ -171,8 +181,8 @@ app.post('/api/auth/register-request', async (req, res) => {
     // Save temporarily in memory
     pendingRegistrations.set(email, { name, email, password, otp, expires });
 
-    // Send verification email
-    await sendEmail(
+    // Send verification email (non-blocking)
+    sendEmail(
       email,
       'Verifikasi Pendaftaran Akun RMS Sembako',
       `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -284,8 +294,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     // Save reset request in memory
     pendingPasswordResets.set(email, { otp, expires });
 
-    // Send password reset email
-    await sendEmail(
+    // Send password reset email (non-blocking)
+    sendEmail(
       email,
       'Reset Kata Sandi Akun RMS Sembako',
       `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
