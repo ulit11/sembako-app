@@ -13,6 +13,18 @@
           flat
           round
           dense
+          :color="largeTextMode ? 'amber-4' : 'white'"
+          icon="text_fields"
+          class="q-mr-xs"
+          @click="toggleLargeTextMode"
+        >
+          <q-tooltip>{{ largeTextMode ? 'Teks Normal' : 'Teks Besar' }}</q-tooltip>
+        </q-btn>
+
+        <q-btn
+          flat
+          round
+          dense
           :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
           class="q-mr-xs"
           @click="toggleDarkMode"
@@ -88,11 +100,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import RmsLogo from '../components/RmsLogo.vue'
+import { useElderMode } from '../composables/useElderMode'
 
 const $q = useQuasar()
 const router = useRouter()
@@ -112,6 +125,13 @@ function toggleDarkMode() {
   $q.dark.set(nextVal)
   localStorage.setItem('darkMode', nextVal)
 }
+
+// Mode Orang Tua (Large Text Mode) setup
+const { largeTextMode, toggleLargeTextMode, applyLargeTextMode } = useElderMode()
+
+onMounted(() => {
+  applyLargeTextMode(largeTextMode.value)
+})
 
 function handleLogout() {
   authStore.logout()
@@ -162,6 +182,96 @@ body.body--dark {
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
   .body--dark & {
     box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+  }
+}
+
+// Mode Orang Tua (Elder Mode Accessibility overrides)
+body.elder-mode {
+  font-size: 16px !important;
+
+  .text-h5 {
+    font-size: 1.85rem !important;
+    font-weight: 800 !important;
+  }
+
+  .text-h6 {
+    font-size: 1.55rem !important;
+    font-weight: 800 !important;
+  }
+
+  .text-subtitle1 {
+    font-size: 1.35rem !important;
+    font-weight: 700 !important;
+  }
+
+  .text-subtitle2 {
+    font-size: 1.15rem !important;
+    font-weight: 700 !important;
+  }
+
+  .text-body1 {
+    font-size: 1.25rem !important;
+  }
+
+  .text-body2 {
+    font-size: 1.15rem !important;
+  }
+
+  .text-caption {
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+  }
+
+  .q-btn {
+    padding: 12px 16px !important;
+    font-size: 1.15rem !important;
+    font-weight: bold !important;
+
+    &.q-btn--round {
+      padding: 10px !important;
+    }
+  }
+
+  .q-field__native,
+  .q-field__input {
+    font-size: 1.3rem !important;
+  }
+
+  .q-field__label {
+    font-size: 1.15rem !important;
+  }
+
+  .q-field__prefix,
+  .q-field__suffix {
+    font-size: 1.25rem !important;
+  }
+
+  .q-tab__label {
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+  }
+
+  .q-tab__icon {
+    font-size: 26px !important;
+  }
+
+  .product-card,
+  .cart-card {
+    margin-bottom: 14px !important;
+
+    .q-card__section {
+      padding: 18px !important;
+    }
+  }
+
+  .q-chip {
+    font-size: 0.95rem !important;
+    padding: 8px 12px !important;
+    height: auto !important;
+  }
+
+  .q-gutter-y-sm > * {
+    margin-top: 14px !important;
   }
 }
 </style>

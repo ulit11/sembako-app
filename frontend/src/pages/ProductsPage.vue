@@ -60,37 +60,39 @@
 
     <!-- Search & Filters -->
     <q-card class="q-mb-md shadow-1 rounded-borders card-surface">
-      <q-card-section class="q-pa-sm q-gutter-y-xs">
+      <q-card-section :class="largeTextMode ? 'q-pa-md q-gutter-y-sm' : 'q-pa-sm q-gutter-y-xs'">
         <q-input
           v-model="searchQuery"
-          dense
+          :dense="!largeTextMode"
           outlined
           placeholder="Cari nama barang atau barcode..."
           clearable
           @update:model-value="loadProducts"
+          class="bg-white dark-bg-grey"
         >
           <template v-slot:prepend>
-            <q-icon name="search" />
+            <q-icon name="search" :size="largeTextMode ? '28px' : '20px'" />
           </template>
           <template v-slot:append>
             <q-btn
               flat
               round
-              dense
+              :dense="!largeTextMode"
               icon="photo_camera"
               color="primary"
+              :size="largeTextMode ? 'lg' : 'md'"
               @click="startScanning('search')"
             >
-              <q-tooltip>Scan Barcode dengan Kamera</q-tooltip>
+              <q-tooltip>Scan Barcode</q-tooltip>
             </q-btn>
           </template>
         </q-input>
 
-        <div class="row q-col-gutter-xs q-mt-xs">
+        <div class="row q-col-gutter-sm q-mt-xs">
           <div class="col-6">
             <q-select
               v-model="selectedCategory"
-              dense
+              :dense="!largeTextMode"
               outlined
               :options="categoryOptions"
               label="Kategori"
@@ -102,7 +104,7 @@
           <div class="col-6">
             <q-select
               v-model="selectedStockStatus"
-              dense
+              :dense="!largeTextMode"
               outlined
               :options="stockStatusOptions"
               label="Status Stok"
@@ -135,81 +137,104 @@
         <q-card-section class="q-pa-md">
           <div class="row justify-between items-start">
             <!-- Product Information -->
-            <div class="col-9">
+            <div class="col-12 q-mb-xs">
               <div class="row items-center q-gutter-x-xs q-mb-xs">
                 <q-chip
-                  dense
+                  :dense="!largeTextMode"
                   square
                   :color="getCategoryColor(product.category)"
                   text-color="white"
-                  class="text-caption text-weight-medium q-ma-none"
-                  size="11px"
+                  class="text-caption text-weight-bold q-ma-none"
                 >
                   {{ product.category }}
                 </q-chip>
                 <q-chip
                   v-if="product.barcode"
-                  dense
+                  :dense="!largeTextMode"
                   square
                   outline
                   color="grey-6"
                   class="text-caption q-ma-none"
-                  size="11px"
                   icon="qr_code"
                 >
                   {{ product.barcode }}
                 </q-chip>
               </div>
 
-              <div class="text-subtitle1 text-weight-bold text-grey-9 dark-text leading-tight q-mb-xs">
+              <div class="text-subtitle1 text-weight-bold text-grey-9 dark-text leading-tight q-mb-xs" :style="largeTextMode ? 'font-size: 1.35rem !important;' : ''">
                 {{ product.name }}
               </div>
               <div v-if="product.description" class="text-caption text-grey-6 q-mb-sm">
                 {{ product.description }}
               </div>
             </div>
-
-            <!-- Action buttons -->
-            <div v-if="authStore.user?.role === 'OWNER'" class="col-3 text-right">
-              <q-btn flat round dense color="primary" icon="edit" size="sm" @click="openEditDialog(product)" />
-              <q-btn flat round dense color="negative" icon="delete" size="sm" @click="confirmDelete(product)" />
-            </div>
           </div>
 
           <q-separator class="q-my-sm opacity-50" />
 
           <!-- Financial and Stock Details -->
-          <div class="row items-center justify-between text-caption">
-            <div class="row items-center q-gutter-x-md col-8">
+          <div class="row items-center justify-between q-col-gutter-xs">
+            <div class="row items-center q-gutter-x-md col-7">
               <div v-if="authStore.user?.role === 'OWNER'">
-                <span class="text-grey-6 block">Harga Modal:</span>
+                <span class="text-grey-6 block text-caption">Modal:</span>
                 <span class="text-weight-bold text-grey-8 dark-text">{{ formatRupiah(product.costPrice) }}</span>
               </div>
               <div>
-                <span class="text-grey-6 block">Harga Jual:</span>
-                <span class="text-weight-bold text-primary">{{ formatRupiah(product.sellPrice) }}</span>
-              </div>
-              <div v-if="authStore.user?.role === 'OWNER'">
-                <span class="text-grey-6 block">Margin Untung:</span>
-                <span class="text-weight-bold text-green-7">+{{ formatRupiah(product.sellPrice - product.costPrice) }}</span>
+                <span class="text-grey-6 block text-caption">Jual:</span>
+                <span class="text-weight-bold text-primary" :style="largeTextMode ? 'font-size: 1.25rem !important;' : ''">{{ formatRupiah(product.sellPrice) }}</span>
               </div>
             </div>
 
             <!-- Stock Indicator -->
-            <div class="text-right col-4">
-              <span class="text-grey-6 block">Stok Tersedia:</span>
+            <div class="text-right col-5">
+              <span class="text-grey-6 block text-caption">Sisa Stok:</span>
               <div class="row items-center justify-end q-gutter-x-xs">
-                <span class="text-subtitle2 text-weight-bold text-grey-9 dark-text">
+                <q-chip
+                  square
+                  :color="product.stock === 0 ? 'red-1' : (product.stock <= product.minStock ? 'amber-1' : 'green-1')"
+                  :text-color="product.stock === 0 ? 'red-9' : (product.stock <= product.minStock ? 'amber-9' : 'green-9')"
+                  class="text-weight-bold q-ma-none"
+                  :dense="!largeTextMode"
+                >
                   {{ product.stock }} {{ product.unit }}
-                </span>
-                <q-icon
-                  :name="product.stock === 0 ? 'block' : (product.stock <= product.minStock ? 'warning' : 'check_circle')"
-                  :color="product.stock === 0 ? 'red' : (product.stock <= product.minStock ? 'amber' : 'green')"
-                  size="16px"
-                />
+                  <q-icon
+                    :name="product.stock === 0 ? 'block' : (product.stock <= product.minStock ? 'warning' : 'check_circle')"
+                    class="q-ml-xs"
+                    size="16px"
+                  />
+                </q-chip>
               </div>
             </div>
           </div>
+
+          <!-- Bottom Action Buttons for Owners -->
+          <template v-if="authStore.user?.role === 'OWNER'">
+            <q-separator class="q-mt-sm q-mb-xs opacity-50" />
+            <div class="row justify-end q-gutter-x-sm q-pt-xs">
+              <q-btn
+                flat
+                color="primary"
+                icon="edit"
+                label="Ubah"
+                no-caps
+                :dense="!largeTextMode"
+                :size="largeTextMode ? 'md' : 'sm'"
+                class="rounded-borders text-weight-bold"
+                @click="openEditDialog(product)"
+              />
+              <q-btn
+                flat
+                color="negative"
+                icon="delete"
+                label="Hapus"
+                no-caps
+                :dense="!largeTextMode"
+                :size="largeTextMode ? 'md' : 'sm'"
+                class="rounded-borders text-weight-bold"
+                @click="confirmDelete(product)"
+              />
+            </div>
+          </template>
         </q-card-section>
       </q-card>
     </div>
@@ -407,12 +432,14 @@ import { useAuthStore } from '../stores/authStore'
 import { storeToRefs } from 'pinia'
 import { Html5Qrcode } from 'html5-qrcode'
 import { api } from '../boot/axios'
+import { useElderMode } from '../composables/useElderMode'
 
 const $q = useQuasar()
 const route = useRoute()
 const productStore = useProductStore()
 const authStore = useAuthStore()
 const { products } = storeToRefs(productStore)
+const { largeTextMode } = useElderMode()
 
 const isAllowedTestUser = computed(() => {
   const allowed = ['watisulistiyo69@gmail.com', 'agung.ulit@gmail.com']

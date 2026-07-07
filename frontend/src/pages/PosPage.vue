@@ -17,28 +17,30 @@
 
     <!-- Product Search & Add Area -->
     <q-card class="q-mb-md shadow-1 rounded-borders card-surface">
-      <q-card-section class="q-pa-sm q-gutter-y-xs">
+      <q-card-section :class="largeTextMode ? 'q-pa-md q-gutter-y-sm' : 'q-pa-sm q-gutter-y-xs'">
         <q-input
           v-model="searchQuery"
-          dense
+          :dense="!largeTextMode"
           outlined
           placeholder="Ketik nama sembako / scan barcode..."
           clearable
           @update:model-value="searchProducts"
+          class="bg-white dark-bg-grey"
         >
           <template v-slot:prepend>
-            <q-icon name="search" />
+            <q-icon name="search" :size="largeTextMode ? '28px' : '20px'" />
           </template>
           <template v-slot:append>
             <q-btn
               flat
               round
-              dense
+              :dense="!largeTextMode"
               icon="photo_camera"
               color="primary"
+              :size="largeTextMode ? 'lg' : 'md'"
               @click="startScanning"
             >
-              <q-tooltip>Scan Barcode dengan Kamera</q-tooltip>
+              <q-tooltip>Scan Barcode</q-tooltip>
             </q-btn>
           </template>
         </q-input>
@@ -58,15 +60,16 @@
             v-ripple
             :disabled="prod.stock <= 0"
             @click="addProductToCart(prod)"
+            :class="largeTextMode ? 'q-py-md' : ''"
           >
             <q-item-section>
-              <q-item-label class="text-weight-bold">{{ prod.name }}</q-item-label>
+              <q-item-label class="text-weight-bold" :style="largeTextMode ? 'font-size: 1.15rem !important;' : ''">{{ prod.name }}</q-item-label>
               <q-item-label caption>
-                Kategori: {{ prod.category }} | Unit: {{ prod.unit }} | Barcode: {{ prod.barcode || '-' }}
+                Unit: {{ prod.unit }} | Barcode: {{ prod.barcode || '-' }}
               </q-item-label>
             </q-item-section>
             <q-item-section side class="text-right">
-              <q-item-label class="text-primary text-weight-bold">{{ formatRupiah(prod.sellPrice) }}</q-item-label>
+              <q-item-label class="text-primary text-weight-bold" :style="largeTextMode ? 'font-size: 1.15rem !important;' : ''">{{ formatRupiah(prod.sellPrice) }}</q-item-label>
               <q-item-label caption :class="prod.stock <= prod.minStock ? 'text-amber-9 text-weight-bold' : ''">
                 Stok: {{ prod.stock }}
               </q-item-label>
@@ -90,10 +93,10 @@
           :key="item.product.id"
           class="cart-card shadow-1 rounded-borders card-surface"
         >
-          <q-card-section class="q-pa-sm">
+          <q-card-section :class="largeTextMode ? 'q-pa-md' : 'q-pa-sm'">
             <div class="row justify-between items-center no-wrap">
-              <div class="col-6">
-                <div class="text-subtitle2 text-weight-bold text-grey-9 dark-text leading-tight">
+              <div class="col-5">
+                <div class="text-subtitle2 text-weight-bold text-grey-9 dark-text leading-tight" :style="largeTextMode ? 'font-size: 1.15rem !important;' : ''">
                   {{ item.product.name }}
                 </div>
                 <div class="text-caption text-grey-6">
@@ -104,40 +107,41 @@
               <!-- Quantity Controls -->
               <div class="col-4 flex items-center justify-center no-wrap">
                 <q-btn
-                  flat
+                  outline
                   round
-                  dense
+                  :dense="!largeTextMode"
                   color="grey-7"
                   icon="remove"
-                  size="sm"
+                  :size="largeTextMode ? 'md' : 'sm'"
                   @click="decreaseQty(item)"
                 />
-                <span class="q-mx-sm text-weight-bold text-subtitle2">{{ item.quantity }}</span>
+                <span class="q-mx-md text-weight-bold text-subtitle1">{{ item.quantity }}</span>
                 <q-btn
-                  flat
+                  outline
                   round
-                  dense
+                  :dense="!largeTextMode"
                   color="primary"
                   icon="add"
-                  size="sm"
+                  :size="largeTextMode ? 'md' : 'sm'"
                   :disabled="item.quantity >= item.product.stock"
                   @click="increaseQty(item)"
                 />
               </div>
 
               <!-- Item Total and Delete -->
-              <div class="col-2 text-right">
-                <div class="text-subtitle2 text-weight-bold text-primary">
+              <div class="col-3 text-right">
+                <div class="text-subtitle2 text-weight-bold text-primary" :style="largeTextMode ? 'font-size: 1.1rem !important;' : ''">
                   {{ formatRupiah(item.product.sellPrice * item.quantity) }}
                 </div>
                 <q-btn
                   flat
                   round
-                  dense
+                  :dense="!largeTextMode"
                   color="negative"
                   icon="delete"
-                  size="xs"
+                  :size="largeTextMode ? 'md' : 'sm'"
                   @click="removeFromCart(item.product.id)"
+                  class="q-mt-xs"
                 />
               </div>
             </div>
@@ -167,8 +171,8 @@
               :text-color="paymentMethod === method.value ? 'white' : 'grey-9'"
               :label="method.label"
               no-caps
-              dense
-              unevaluated
+              :dense="!largeTextMode"
+              :style="largeTextMode ? 'height: 52px; font-size: 1.1rem;' : ''"
               @click="setPaymentMethod(method.value)"
             />
           </div>
@@ -457,11 +461,13 @@ import { useTransactionStore } from '../stores/transactionStore'
 import { useAuthStore } from '../stores/authStore'
 import { storeToRefs } from 'pinia'
 import { Html5Qrcode } from 'html5-qrcode'
+import { useElderMode } from '../composables/useElderMode'
 
 const $q = useQuasar()
 const productStore = useProductStore()
 const transactionStore = useTransactionStore()
 const authStore = useAuthStore()
+const { largeTextMode } = useElderMode()
 
 const { cart } = storeToRefs(transactionStore)
 const cartTotal = computed(() => transactionStore.cartTotal)
